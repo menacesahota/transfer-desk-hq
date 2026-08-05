@@ -30,8 +30,14 @@ export async function saveSeen(seen) {
   await fs.writeFile(SEEN_PATH, JSON.stringify([...seen], null, 2));
 }
 
+// Handles whose images we never attach to a post, regardless of channel.
+const NO_IMAGE_HANDLES = new Set(["skysportsnews"]);
+
 /** Reuse the source tip's image, converted to black and white. */
 export async function enrichTipWithImage(tip) {
+  if (NO_IMAGE_HANDLES.has(String(tip.handle || "").toLowerCase())) {
+    return { ...tip, imageUrl: null, localImage: undefined, usedSourceImage: false, usedBwImage: false };
+  }
   if (tip.localImage && tip.usedBwImage) return tip;
   if (!tip.imageUrl) return tip;
 
