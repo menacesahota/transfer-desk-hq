@@ -1,0 +1,7 @@
+node_modules/
+.env
+drafts/
+data/
+data/media/
+*.log
+.DS_Store

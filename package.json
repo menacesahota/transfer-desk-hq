@@ -1,0 +1,23 @@
+{
+  "name": "transfer-desk-hq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Football breaking news desk for @TransferDeskHQ — rewrite + credit the original source",
+  "type": "module",
+  "scripts": {
+    "news": "node src/cli.js news",
+    "watch": "node src/cli.js watch",
+    "draft": "node src/cli.js draft",
+    "post": "node src/cli.js post",
+    "verify": "node src/cli.js verify"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "rss-parser": "^3.13.0",
+    "sharp": "^0.35.3",
+    "twitter-api-v2": "^1.24.0"
+  }
+}
