@@ -1,14 +1,7 @@
 import "dotenv/config";
 import { fetchNews } from "./news.js";
 import { hasXCredentials, hasBearer, getUserClient } from "./x-client.js";
-import {
-  ensureDirs,
-  loadSeen,
-  saveSeen,
-  saveDraft,
-  postTweet,
-  enrichTipWithImage,
-} from "./post.js";
+import { ensureDirs } from "./post.js";
 import { logCycleTips, runExtras, emitPulse } from "./extras.js";
 import { loadLog } from "./store.js";
 import { findClusters, buildConsensusPost } from "./consensus.js";
@@ -68,9 +61,13 @@ async function news() {
   }
 }
 
-async function draftOrPost({ publish, cycleCount = 0 }) {
+/**
+ * One desk cycle: fetch breaker tips, log them for the desk features,
+ * then emit any due desk posts (consensus / saga / scorecard / pulse).
+ * Individual source tweets are never rewritten or reposted.
+ */
+async function runCycle({ publish, cycleCount = 0 }) {
   await ensureDirs();
-  const seen = await loadSeen();
   const perSource = Number(process.env.POSTS_PER_SOURCE || 5);
   const { channel, tips, errors } = await fetchNews({ perSource, breakingOnly: true });
 
@@ -79,40 +76,13 @@ async function draftOrPost({ publish, cycleCount = 0 }) {
     for (const e of errors) console.log(`  API: @${e.handle || "?"}: ${e.error}`);
   }
 
-  // Log every newsworthy tip for consensus/saga/scorecard/pulse, even ones we
-  // don't relay this cycle.
   const logged = await logCycleTips(tips.filter((t) => t.source !== "error"));
-  if (logged.length) console.log(`Logged ${logged.length} tip(s) to the desk history.`);
+  console.log(
+    logged.length
+      ? `Logged ${logged.length} tip(s) to the desk history.`
+      : "No new tips this cycle."
+  );
 
-  const fresh = tips.filter((t) => t.source !== "error" && !seen.has(t.id));
-  if (!fresh.length) {
-    console.log("No new breaking tips.");
-    await runExtras({ publish });
-    return;
-  }
-
-  // Trust the explicit `publish` flag only — don't let POST_MODE override it here.
-  // (`watch()` already folds POST_MODE into `publish` before calling this; `draft`
-  // must always stay local regardless of POST_MODE.)
-  const mode = publish ? "post" : "draft";
-  console.log(`Processing ${fresh.length} tip(s) in ${mode} mode…\n`);
-
-  for (const tip of fresh.slice(0, Number(process.env.MAX_POSTS_PER_CYCLE || 3))) {
-    const enriched = await enrichTipWithImage(tip);
-    console.log(`@${enriched.handle}${enriched.kind === "rumour" ? " [RUMOUR]" : ""}:\n${enriched.draft}`);
-    console.log(`Image: ${enriched.localImage || enriched.imageUrl || "(none)"}${enriched.usedBwImage ? " (B&W)" : ""}\n`);
-
-    if (mode === "post") {
-      const posted = await postTweet(enriched.draft, enriched);
-      console.log(`Posted: https://x.com/TransferDeskHQ/status/${posted.id}`);
-    } else {
-      const file = await saveDraft(enriched);
-      console.log(`Saved draft: ${file}`);
-    }
-    seen.add(tip.id);
-  }
-
-  await saveSeen(seen);
   await runExtras({ publish, cycleCount });
 }
 
@@ -123,7 +93,7 @@ async function watch() {
   const tick = async () => {
     cycle++;
     try {
-      await draftOrPost({ publish: mode === "post", cycleCount: cycle });
+      await runCycle({ publish: mode === "post", cycleCount: cycle });
     } catch (err) {
       console.error("Watch cycle error:", err.message);
     }
@@ -175,8 +145,8 @@ async function pulse() {
 const runners = {
   verify,
   news,
-  draft: () => draftOrPost({ publish: false }),
-  post: () => draftOrPost({ publish: true }),
+  draft: () => runCycle({ publish: false }),
+  post: () => runCycle({ publish: true }),
   watch,
   consensus,
   sagas,

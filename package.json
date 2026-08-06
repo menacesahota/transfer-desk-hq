@@ -2,7 +2,7 @@
   "name": "transfer-desk-hq",
   "version": "1.0.0",
   "private": true,
-  "description": "Football breaking news desk for @TransferDeskHQ — rewrite + credit the original source",
+  "description": "Football transfer desk for @TransferDeskHQ — original desk content (consensus, sagas, scorecards, pulse) from logged breaker tips",
   "type": "module",
   "scripts": {
     "news": "node src/cli.js news",

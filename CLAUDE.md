@@ -1,6 +1,6 @@
 ﻿# Transfer Desk HQ (transfer-desk-hq)
 
-Football breaking-news desk for @TransferDeskHQ — pull breaker posts, rewrite, credit source, post to X.
+Football transfer desk for @TransferDeskHQ — original desk content built from logged breaker tips: consensus calls, saga timelines, breaker scorecards, and the LIVE DESK pulse. Source tweets are logged for analysis but never rewritten or reposted.
 
 ## Stack
 
@@ -12,10 +12,10 @@ Football breaking-news desk for @TransferDeskHQ — pull breaker posts, rewrite,
 
 ```bash
 npm install
-npm run news      # fetch news
-npm run watch     # watch cycle
-npm run draft     # write drafts/ only
-npm run post      # publish (respects POST_MODE)
+npm run news      # preview fetched tips
+npm run watch     # watch cycle: fetch + log tips, emit due desk posts
+npm run draft     # one cycle, desk posts to drafts/ only
+npm run post      # one cycle, desk posts published
 npm run verify
 npm run consensus # preview multi-source story clusters
 npm run sagas     # list active per-player transfer sagas
@@ -37,7 +37,8 @@ npm run pulse     # digest of last PULSE_HOURS + image card (add --post to publi
 
 ## Rules
 
-- Always credit the original source when rewriting.
+- Never rewrite or repost source tweets; desk posts are original summaries.
+- Always credit sources (@handles) in consensus, saga, and pulse output.
 - POST_MODE=draft keeps output local; post publishes to X.
 - Never commit .env.
 
