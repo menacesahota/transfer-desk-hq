@@ -79,6 +79,11 @@ const esc = (s) =>
 /** Render a 1200x675 dark card PNG with the pulse breakdown. Returns file path. */
 export async function renderPulseCard(pulse, { outDir } = {}) {
   const { default: sharp } = await import("sharp");
+  let logoB64 = null;
+  try {
+    const logoPath = new URL("../assets/logo-tdhq.png", import.meta.url);
+    logoB64 = (await fs.readFile(logoPath)).toString("base64");
+  } catch { /* fall back to text wordmark */ }
   const dir = outDir || path.resolve(STORAGE_DIR, "data/media");
   await fs.mkdir(dir, { recursive: true });
 
@@ -190,12 +195,15 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
   <circle cx="90" cy="106" r="11" fill="${INK}"/>
   <text x="118" y="126" font-size="54" fill="${INK}" font-family="${FONT}" font-weight="bold" letter-spacing="1">LIVE DESK</text>
   <text x="120" y="154" font-size="19" fill="${INK_SOFT}" font-family="${FONT}">${esc(stamp)}</text>
-  <!-- all-black wordmark, top right -->
-  <g>
+  <!-- TD HQ logo tile, top right -->
+  ${logoB64
+    ? `<defs><clipPath id="logoClip"><rect x="1016" y="48" width="120" height="120" rx="22"/></clipPath></defs>
+  <image x="1016" y="48" width="120" height="120" clip-path="url(#logoClip)" href="data:image/png;base64,${logoB64}"/>`
+    : `<g>
     <text x="1136" y="96" font-size="34" fill="${INK}" font-family="${FONT}" font-weight="bold" letter-spacing="2" text-anchor="end">TRANSFER</text>
     <rect x="936" y="106" width="200" height="4" fill="${INK}"/>
     <text x="1136" y="134" font-size="19" fill="${INK}" font-family="${FONT}" font-weight="bold" letter-spacing="5.5" text-anchor="end">DESK HQ</text>
-  </g>
+  </g>`}
   ${chipSvg}
   ${rowSvg || emptySvg}
   <!-- breaking-news ticker -->
