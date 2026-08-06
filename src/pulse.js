@@ -92,11 +92,12 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
     if (rows.length >= 6) break;
   }
 
+  // Monochrome stage ladder: heavier mark = further along the deal
   const STAGE_STYLE = {
-    done: { color: "#0a7c3e", label: "DONE DEAL" },
-    medical: { color: "#0b5cad", label: "MEDICAL" },
-    agreement: { color: "#6a30c9", label: "AGREED" },
-    bid: { color: "#c9184a", label: "BID IN" },
+    done: { mode: "solid", tone: "#131313", label: "DONE DEAL" },
+    medical: { mode: "solid", tone: "#70767d", label: "MEDICAL" },
+    agreement: { mode: "outline", tone: "#131313", label: "AGREED" },
+    bid: { mode: "outline", tone: "#9aa0a6", label: "BID IN" },
   };
 
   const INK = "#131313";
@@ -120,9 +121,12 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
       return `
       <rect x="64" y="${y}" width="1072" height="${ROW_H}" rx="13" fill="#000000" fill-opacity="${isDone ? "0.085" : "0.05"}"/>
       <rect x="64" y="${y}" width="1072" height="${ROW_H}" rx="13" fill="none" stroke="#000000" stroke-opacity="${isDone ? "0.22" : "0.10"}" stroke-width="${isDone ? 2 : 1}"/>
-      <rect x="64" y="${y + 11}" width="5" height="${ROW_H - 22}" rx="2.5" fill="${st.color}"/>
-      <rect x="90" y="${cy - 14}" width="128" height="28" rx="14" fill="${st.color}"/>
-      <text x="154" y="${cy + 6}" font-size="15" fill="#ffffff" font-family="${FONT}" font-weight="bold" text-anchor="middle" letter-spacing="1.5">${st.label}</text>
+      <rect x="64" y="${y + 11}" width="5" height="${ROW_H - 22}" rx="2.5" fill="${st.tone}"/>
+      ${st.mode === "solid"
+        ? `<rect x="90" y="${cy - 14}" width="128" height="28" rx="14" fill="${st.tone}"/>
+      <text x="154" y="${cy + 6}" font-size="15" fill="#ffffff" font-family="${FONT}" font-weight="bold" text-anchor="middle" letter-spacing="1.5">${st.label}</text>`
+        : `<rect x="90" y="${cy - 14}" width="128" height="28" rx="14" fill="none" stroke="${st.tone}" stroke-width="2"/>
+      <text x="154" y="${cy + 6}" font-size="15" fill="${st.tone}" font-family="${FONT}" font-weight="bold" text-anchor="middle" letter-spacing="1.5">${st.label}</text>`}
       <text x="244" y="${cy + 8}" font-size="25" font-family="${FONT}"><tspan fill="${INK}" font-weight="bold">${esc(r.player)}</tspan><tspan dx="13" fill="${INK_SOFT}">${esc(clubStr)}</tspan></text>
       ${feeStr ? `<text x="1108" y="${cy - 3}" font-size="23" fill="${INK}" font-family="${FONT}" font-weight="bold" text-anchor="end">${esc(feeStr)}</text>
       <text x="1108" y="${cy + 19}" font-size="14" fill="${INK_FAINT}" font-family="${FONT}" text-anchor="end">@${esc(r.handle)}</text>`
