@@ -162,7 +162,7 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
   });
 
-  const tickerText = `@TRANSFERDESKHQ  \u2022  LAST ${pulse.hours}H  \u2022  SOURCES CREDITED ON EVERY STORY`;
+  const tickerText = `@TRANSFERDESKHQ  \u2022  LAST ${pulse.hours}H  \u2022  LIVE TRANSFER COVERAGE`;
 
   const svg = `
 <svg width="1200" height="675" xmlns="http://www.w3.org/2000/svg">
