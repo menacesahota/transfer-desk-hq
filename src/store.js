@@ -5,7 +5,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { extractEntities } from "./entities.js";
+import { extractEntities, buildSurnameIndex } from "./entities.js";
 
 const STORAGE_DIR = process.env.TRANSFER_DESK_STORAGE || ".";
 const DATA_DIR = path.resolve(STORAGE_DIR, "data");
@@ -49,10 +49,15 @@ export async function recordTips(tips, { weights = {} } = {}) {
   const log = await loadLog();
   const known = new Set(log.map((e) => e.id));
   const added = [];
+  // Surname-only mentions ("Isak now advancing") are linked back to a
+  // player already established by a full-name mention ("Alexander Isak")
+  // earlier in the log or earlier in this same batch — kept current as we
+  // go so tips within one fetch cycle can resolve against each other too.
+  let surnameIndex = buildSurnameIndex(log);
 
   for (const tip of tips) {
     if (!tip?.id || tip.source === "error" || known.has(tip.id)) continue;
-    const entities = extractEntities(tip.original);
+    const entities = extractEntities(tip.original, { surnameIndex });
     const entry = {
       id: tip.id,
       handle: tip.handle,
@@ -67,6 +72,7 @@ export async function recordTips(tips, { weights = {} } = {}) {
     log.push(entry);
     known.add(entry.id);
     added.push(entry);
+    if (entry.player) surnameIndex = buildSurnameIndex(log);
   }
 
   if (added.length) await saveLog(log);

@@ -350,9 +350,70 @@ export function playerKey(name) {
     .join(" ");
 }
 
+/**
+ * Fallback: a single capitalised word that could be a surname-only mention
+ * ("Isak now advancing", "Saka wanted by Real Madrid"). Returned as a bare
+ * candidate — callers must resolve it against known full names before
+ * trusting it, since one surname alone is too weak to key a story on.
+ */
+export function extractSurnameCandidate(text) {
+  const clean = String(text || "")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[@#]\w+/g, " ")
+    .replace(/["“”«»]/g, " ")
+    .replace(/[.!?,;:]\s+/g, " ¦ ");
+
+  const NAME_TOKEN = "\\p{Lu}[\\p{L}'’.-]+";
+  const re = new RegExp(NAME_TOKEN, "gu");
+
+  for (const m of clean.matchAll(re)) {
+    if (ROLE_BEFORE.test(clean.slice(0, m.index))) continue;
+    const word = m[0].replace(/[.,!?]+$/, "");
+    const lower = word.toLowerCase();
+    if (NOT_NAME_WORDS.has(lower) || isClubWord(lower)) continue;
+    if (word.length < 3) continue;
+    // Skip the start of a sentence/tweet-boundary token like "Understand" —
+    // already filtered by NOT_NAME_WORDS for known cases, but also require
+    // it isn't immediately followed by a colon (label-style prefixes).
+    if (/^\s*:/.test(clean.slice(m.index + m[0].length))) continue;
+    return word;
+  }
+  return null;
+}
+
+/**
+ * Build a surname -> full name index from existing log entries, so a later
+ * tip that only uses a surname ("Isak") can be linked to the player already
+ * established by an earlier full-name mention ("Alexander Isak"). Ambiguous
+ * surnames (shared by 2+ different known players) resolve to null rather
+ * than risk mixing two players' stories together.
+ */
+export function buildSurnameIndex(log) {
+  const bySurname = new Map();
+  for (const e of log) {
+    const name = entryPlayer(e);
+    if (!name) continue;
+    const surname = name.trim().split(/\s+/).pop().toLowerCase();
+    if (!bySurname.has(surname)) bySurname.set(surname, new Set());
+    bySurname.get(surname).add(name);
+  }
+  const resolved = new Map();
+  for (const [surname, names] of bySurname) {
+    if (names.size === 1) resolved.set(surname, [...names][0]);
+  }
+  return resolved;
+}
+
 /** Extract everything at once from a tip's original text. */
-export function extractEntities(text) {
-  const player = extractPlayer(text);
+export function extractEntities(text, { surnameIndex } = {}) {
+  let player = extractPlayer(text);
+  if (!player && surnameIndex) {
+    const candidate = extractSurnameCandidate(text);
+    if (candidate) {
+      const resolved = surnameIndex.get(candidate.toLowerCase());
+      if (resolved) player = resolved;
+    }
+  }
   const { to, from } = detectDirection(text);
   return {
     player,
