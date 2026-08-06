@@ -6,7 +6,14 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { stageLabel } from "./entities.js";
+import { stageLabel, moveLabel, entryDirection } from "./entities.js";
+
+/** Per-entry direction with safe fallback for entries logged before direction parsing. */
+function entryMove(e) {
+  const dir = entryDirection(e);
+  if (dir.to || dir.from) return dir;
+  return { to: e.clubs?.[0] || null, from: null };
+}
 
 const STORAGE_DIR = process.env.TRANSFER_DESK_STORAGE || ".";
 const PULSE_HOURS = Number(process.env.PULSE_HOURS || 24);
@@ -41,9 +48,8 @@ export function buildPulse(log, { hours = PULSE_HOURS, now = Date.now() } = {}) 
 }
 
 function itemLine(e) {
-  const club = e.clubs?.[0] ? ` → ${e.clubs[0]}` : "";
   const fee = e.fee != null ? ` £${e.fee}m` : "";
-  return `${e.player || "Unnamed move"}${club}${fee}`;
+  return `${moveLabel(e.player || "Unnamed move", entryMove(e))}${fee}`;
 }
 
 export function pulsePostKey(now = new Date()) {
@@ -91,7 +97,8 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
   const order = ["done", "medical", "agreement", "bid"];
   for (const stage of order) {
     for (const e of pulse.byStage[stage].slice(0, stage === "done" ? 5 : 3)) {
-      rows.push({ stage, player: e.player || "Unnamed move", club: e.clubs?.[0] || null, fee: e.fee, handle: e.handle });
+      const mv = entryMove(e);
+      rows.push({ stage, player: e.player || "Unnamed move", to: mv.to, from: mv.from, fee: e.fee, handle: e.handle });
       if (rows.length >= 6) break;
     }
     if (rows.length >= 6) break;
@@ -121,7 +128,7 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
       const cy = y + ROW_H / 2;
       const st = STAGE_STYLE[r.stage];
       const isDone = r.stage === "done";
-      const clubStr = r.club ? `\u2192\u00a0\u00a0${r.club}` : "";
+      const clubStr = r.to ? `\u2192\u00a0\u00a0${r.to}` : r.from ? `leaving\u00a0${r.from}` : "";
       const feeStr = r.fee != null ? `\u00a3${r.fee}m` : "";
       return `
       <rect x="64" y="${y}" width="1072" height="${ROW_H}" rx="13" fill="#000000" fill-opacity="${isDone ? "0.085" : "0.05"}"/>

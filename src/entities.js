@@ -61,6 +61,31 @@ export const CLUBS = [
   { name: "Celtic", aliases: ["celtic"] },
   { name: "Rangers", aliases: ["rangers"] },
   { name: "Olympiacos", aliases: ["olympiacos", "olympiakós"] },
+  // Championship / EFL — frequent loan and sale destinations
+  { name: "Middlesbrough", aliases: ["middlesbrough", "#boro"] },
+  { name: "Norwich", aliases: ["norwich city", "norwich"] },
+  { name: "West Brom", aliases: ["west bromwich albion", "west brom", "#wba"] },
+  { name: "Sheffield United", aliases: ["sheffield united", "sheff utd"] },
+  { name: "Sheffield Wednesday", aliases: ["sheffield wednesday", "sheff wed"] },
+  { name: "Hull City", aliases: ["hull city", "hull"] },
+  { name: "Coventry", aliases: ["coventry city", "coventry"] },
+  { name: "Stoke", aliases: ["stoke city", "stoke"] },
+  { name: "Swansea", aliases: ["swansea city", "swansea"] },
+  { name: "Cardiff", aliases: ["cardiff city", "cardiff"] },
+  { name: "Watford", aliases: ["watford"] },
+  { name: "Millwall", aliases: ["millwall"] },
+  { name: "Preston", aliases: ["preston north end", "preston"] },
+  { name: "QPR", aliases: ["queens park rangers", "qpr"] },
+  { name: "Blackburn", aliases: ["blackburn rovers", "blackburn"] },
+  { name: "Bristol City", aliases: ["bristol city"] },
+  { name: "Derby County", aliases: ["derby county"] },
+  { name: "Portsmouth", aliases: ["portsmouth"] },
+  { name: "Luton", aliases: ["luton town", "luton"] },
+  { name: "Birmingham", aliases: ["birmingham city", "birmingham"] },
+  { name: "Charlton", aliases: ["charlton athletic", "charlton"] },
+  { name: "Wrexham", aliases: ["wrexham"] },
+  { name: "Plymouth", aliases: ["plymouth argyle", "plymouth"] },
+  { name: "Oxford United", aliases: ["oxford united"] },
 ];
 
 /**
@@ -79,7 +104,7 @@ export const STAGES = [
 const STAGE_PATTERNS = [
   ["done", /\b(here we go|done deal|completed the signing|have completed|transfer complete|has signed|have signed|officially?\s+(?:announced|confirmed|unveiled)|joins from|announcement)\b/i],
   ["medical", /\bmedical\b/i],
-  ["agreement", /\b(agreement|agreed|personal terms|verbal agreement|set to sign|set to join|close to signing|close to joining|on the verge|poised to)\b/i],
+  ["agreement", /\b(agreement|agreed|personal terms|verbal agreement|set to sign|set to join|close to signing|close to joining|closing in on|on the verge|poised to)\b/i],
   ["bid", /\b(bid|offer|proposal|tabled|submitted|rejected|turned down|knocked back)\b/i],
   ["talks", /\b(talks|negotiations|discussions|meeting|contact)\b/i],
   ["interest", /\b(interest|interested|monitoring|tracking|targeting|eyeing|keen on|linked|enquir|inquir|scouting|shortlist)\b/i],
@@ -105,21 +130,80 @@ export function detectStage(text) {
   return null;
 }
 
-/** All clubs mentioned in a tip, canonical names, in order of appearance. */
-export function extractClubs(text) {
+/** Club mentions with positions, in order of appearance. */
+export function extractClubMatches(text) {
   const lower = String(text || "").toLowerCase();
   const found = [];
   for (const club of CLUBS) {
     let idx = -1;
+    let len = 0;
     for (const alias of club.aliases) {
       const i = alias.startsWith("#")
         ? lower.indexOf(alias)
         : indexOfWord(lower, alias);
-      if (i !== -1 && (idx === -1 || i < idx)) idx = i;
+      if (i !== -1 && (idx === -1 || i < idx)) {
+        idx = i;
+        len = alias.length;
+      }
     }
-    if (idx !== -1) found.push({ name: club.name, idx });
+    if (idx !== -1) found.push({ name: club.name, idx, len });
   }
-  return found.sort((a, b) => a.idx - b.idx).map((c) => c.name);
+  return found.sort((a, b) => a.idx - b.idx);
+}
+
+/** All clubs mentioned in a tip, canonical names, in order of appearance. */
+export function extractClubs(text) {
+  return extractClubMatches(text).map((c) => c.name);
+}
+
+/** Cues that mark the club BEFORE the pattern end as a destination. */
+const TO_BEFORE = /(?:join(?:s|ing|ed)?|sign(?:s|ing|ed)?\s+for|mov(?:e|es|ed|ing)\s+to|switch(?:ing)?\s+to|heading\s+to|head(?:s|ed)?\s+to|loan(?:ed)?\s+(?:move\s+|switch\s+)?to|transfer(?:ring)?\s+to|sold\s+to|sale\s+to|poised\s+to\s+(?:move\s+to|join)|nearing\s+a\s+(?:switch|move)\s+to|on\s+his\s+way\s+to|→)\s*(?:the\s+)?$/i;
+
+/** Cues that mark the club BEFORE the pattern end as the origin. */
+const FROM_BEFORE = /(?:from|leav(?:e|es|ing)|left|exit(?:s|ing)?(?:\s+from)?|depart(?:s|ing|ure)?(?:\s+from)?|away\s+from|out\s+of)\s*(?:the\s+)?$/i;
+
+/** Cues right AFTER a club that mark it as the origin (possessive / squad role). */
+const FROM_AFTER = /^(?:'|’)?s?\s*(?:defender|midfielder|striker|forward|winger|goalkeeper|keeper|full-?back|centre-?back|youngster|starlet|academy|captain|star|man|player|outcast)\b/i;
+
+/** Cues right AFTER a club that mark it as the acquiring side. */
+const TO_AFTER = /^\s*(?:have|has)\s+(?:signed|brought\s+in|completed|wrapped\s+up|sealed|agreed\s+(?:a\s+)?(?:deal|terms)\s+to\s+sign|recruit|submitted|tabled|lodged|sent|bid|made\s+an?\s+(?:offer|bid)|opened\s+talks|approached|enquired|asked\s+about)/i;
+
+/** Cues right AFTER a club that mark it as the selling side. */
+const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejected|turned\s+down|knocked\s+back|let\s+.*\s+(?:go|leave)|sanctioned|green-?lit)/i;
+
+/** Interest cues AFTER a club — the interested club is the destination. */
+const INTEREST_AFTER = /^\s*(?:are|is|have|has|remain)\s+(?:interested|keen|monitoring|tracking|keeping\s+tabs|eyeing|targeting|in\s+talks|pushing|leading\s+the\s+race|favourites)/i;
+
+/**
+ * Work out transfer direction: which club the player is heading to (`to`)
+ * and which he is leaving (`from`). Null when the text doesn't say.
+ */
+export function detectDirection(text) {
+  const raw = String(text || "");
+  const matches = extractClubMatches(raw);
+  let to = null;
+  let from = null;
+
+  for (const m of matches) {
+    const pre = raw.slice(Math.max(0, m.idx - 42), m.idx);
+    const post = raw.slice(m.idx + m.len, m.idx + m.len + 60);
+
+    if (!to && TO_BEFORE.test(pre)) to = m.name;
+    else if (!to && (TO_AFTER.test(post) || INTEREST_AFTER.test(post))) to = m.name;
+
+    if (!from && FROM_BEFORE.test(pre)) from = m.name;
+    else if (!from && (FROM_AFTER.test(post) || SELL_AFTER.test(post))) from = m.name;
+  }
+
+  // Two clubs, one side known -> the other is the opposite side
+  const names = matches.map((m) => m.name);
+  if (names.length === 2) {
+    if (to && !from && names.includes(to)) from = names.find((n) => n !== to);
+    if (from && !to && names.includes(from)) to = names.find((n) => n !== from);
+  }
+  if (to && to === from) from = null;
+
+  return { to, from };
 }
 
 function indexOfWord(lower, alias) {
@@ -166,17 +250,24 @@ export function extractPlayer(text) {
   const NAME_TOKEN = "\\p{Lu}[\\p{L}'’.-]+";
   const runRe = new RegExp(`(?:${NAME_TOKEN})(?:\\s+(?:${NAME_TOKEN})){1,3}`, "gu");
 
+  const clubWord = (w) => CLUB_WORDS.has(w.replace(/['’]s$/, ""));
+
   for (const m of clean.matchAll(runRe)) {
     const words = m[0].split(/\s+/);
     const lowerWords = words.map((w) => w.toLowerCase().replace(/[.,!?]+$/, ""));
     if (lowerWords.some((w) => NOT_NAME_WORDS.has(w))) continue;
-    if (lowerWords.every((w) => CLUB_WORDS.has(w))) continue;
+    if (lowerWords.every(clubWord)) continue;
+    // Drop leading club words ("Tottenham's Ashley Phillips" → "Ashley Phillips")
+    while (lowerWords.length > 1 && clubWord(lowerWords[0])) {
+      lowerWords.shift();
+      words.shift();
+    }
     // Drop trailing club words ("Alexander Isak Newcastle" → "Alexander Isak")
-    while (lowerWords.length > 1 && CLUB_WORDS.has(lowerWords[lowerWords.length - 1])) {
+    while (lowerWords.length > 1 && clubWord(lowerWords[lowerWords.length - 1])) {
       lowerWords.pop();
       words.pop();
     }
-    if (words.length < 2) continue;
+    if (words.length < 2 || lowerWords.some(clubWord)) continue;
     return words.join(" ").replace(/[.,!?]+$/, "");
   }
   return null;
@@ -199,11 +290,68 @@ export function playerKey(name) {
 /** Extract everything at once from a tip's original text. */
 export function extractEntities(text) {
   const player = extractPlayer(text);
+  const { to, from } = detectDirection(text);
   return {
     player,
     playerKey: playerKey(player),
     clubs: extractClubs(text),
+    toClub: to,
+    fromClub: from,
     stage: detectStage(text),
     fee: extractFeeMillions(String(text || "")),
   };
+}
+
+/**
+ * Resolve direction across a story's events (latest signal wins).
+ * Falls back to first mentioned club as destination ONLY if no origin
+ * evidence exists — never shows the selling club as the destination.
+ */
+/**
+ * Direction for a single log entry. Entries logged before direction parsing
+ * existed are re-analysed from their stored original text.
+ */
+export function entryDirection(e) {
+  if (e.toClub || e.fromClub) return { to: e.toClub || null, from: e.fromClub || null };
+  if (e.original) return detectDirection(e.original);
+  return { to: null, from: null };
+}
+
+export function resolveMove(events) {
+  let to = null;
+  let from = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const dir = entryDirection(events[i]);
+    if (!to && dir.to) to = dir.to;
+    if (!from && dir.from) from = dir.from;
+  }
+  if (!to && !from) {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const clubs = events[i].clubs?.length ? events[i].clubs : extractClubs(events[i].original || "");
+      if (clubs.length) {
+        to = clubs[0];
+        break;
+      }
+    }
+  }
+  if (!to && from) {
+    // Known origin, unknown destination: try any other mentioned club
+    for (let i = events.length - 1; i >= 0; i--) {
+      const clubs = events[i].clubs?.length ? events[i].clubs : extractClubs(events[i].original || "");
+      const other = clubs.find((c) => c !== from);
+      if (other) {
+        to = other;
+        break;
+      }
+    }
+  }
+  if (to && to === from) to = null;
+  return { to, from };
+}
+
+/** "Player → Club" when destination is known, "Player leaving Club" otherwise. */
+export function moveLabel(player, { to, from }) {
+  if (to) return `${player} → ${to}`;
+  if (from) return `${player} leaving ${from}`;
+  return player;
 }

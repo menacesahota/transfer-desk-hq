@@ -4,7 +4,7 @@
  * post a tiered "confirmed by N sources" update crediting who broke it first.
  */
 
-import { stageRank, stageLabel } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel } from "./entities.js";
 
 const WINDOW_HOURS = Number(process.env.CONSENSUS_WINDOW_HOURS || 12);
 const MIN_SOURCES = Number(process.env.CONSENSUS_MIN_SOURCES || 2);
@@ -39,7 +39,7 @@ export function findClusters(log, { windowHours = WINDOW_HOURS, now = Date.now()
       (best, e) => (stageRank(e.stage) > stageRank(best) ? e.stage : best),
       sorted[0].stage
     );
-    const clubs = mostCommonClubs(sorted);
+    const move = resolveMove(sorted);
     const fee = sorted.map((e) => e.fee).filter((f) => f != null).sort((a, b) => b - a)[0] ?? null;
 
     clusters.push({
@@ -50,7 +50,7 @@ export function findClusters(log, { windowHours = WINDOW_HOURS, now = Date.now()
       first,
       latest,
       stage: topStage,
-      clubs,
+      move,
       fee,
       entries: sorted,
     });
@@ -69,16 +69,6 @@ function pickBestName(entries) {
     .sort((a, b) => b.length - a.length)[0];
 }
 
-function mostCommonClubs(entries) {
-  const counts = new Map();
-  for (const e of entries) {
-    for (const c of e.clubs || []) counts.set(c, (counts.get(c) || 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 2)
-    .map(([c]) => c);
-}
 
 /** Stable key so each cluster+stage posts once. */
 export function clusterPostKey(cluster) {
@@ -97,9 +87,9 @@ function tierMark(sources) {
 
 /** Build the consensus post text (≤280 chars incl. credits). */
 export function buildConsensusPost(cluster) {
-  const { player, clubs, stage, fee, sources, first, entries } = cluster;
+  const { player, stage, fee, sources, first, entries } = cluster;
 
-  const move = clubs.length >= 2 ? `${player} to ${clubs[0]}` : clubs.length === 1 ? `${player} — ${clubs[0]}` : player;
+  const move = moveLabel(player, cluster.move);
   const feeStr = fee != null ? ` (~£${fee}m)` : "";
   const stageStr = stage ? ` | ${stageLabel(stage)}` : "";
 

@@ -4,7 +4,7 @@
  * post a "Day N" timeline update, threaded onto the previous saga post.
  */
 
-import { stageRank, stageLabel } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel } from "./entities.js";
 
 const SAGA_MIN_EVENTS = Number(process.env.SAGA_MIN_EVENTS || 2);
 const SAGA_MAX_AGE_DAYS = Number(process.env.SAGA_MAX_AGE_DAYS || 45);
@@ -35,7 +35,7 @@ export function buildSagas(log, { now = Date.now() } = {}) {
       (best, e) => (stageRank(e.stage) > stageRank(best) ? e.stage : best),
       events[0].stage
     );
-    const clubs = latestClubs(events);
+    const move = resolveMove(events);
 
     sagas.push({
       playerKey: key,
@@ -43,7 +43,7 @@ export function buildSagas(log, { now = Date.now() } = {}) {
       day,
       stage: topStage,
       done: topStage === "done",
-      clubs,
+      move,
       events,
       first,
       latest,
@@ -53,12 +53,6 @@ export function buildSagas(log, { now = Date.now() } = {}) {
   return sagas.sort((a, b) => new Date(b.latest.createdAt) - new Date(a.latest.createdAt));
 }
 
-function latestClubs(events) {
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].clubs?.length) return events[i].clubs;
-  }
-  return [];
-}
 
 /**
  * A saga is worth posting when its latest event raised the max stage.
@@ -87,10 +81,10 @@ function shortDate(iso) {
 
 /** Build the saga update post (≤280 chars). */
 export function buildSagaPost(saga) {
-  const target = saga.clubs[0] ? ` → ${saga.clubs[0]}` : "";
+  const title = moveLabel(saga.player, saga.move);
   const header = saga.done
-    ? `SAGA COMPLETE | ${saga.player}${target}`
-    : `SAGA DAY ${saga.day} | ${saga.player}${target}`;
+    ? `SAGA COMPLETE | ${title}`
+    : `SAGA DAY ${saga.day} | ${title}`;
 
   const milestones = sagaMilestones(saga);
   let lines = milestones.map(
@@ -108,6 +102,5 @@ export function buildSagaPost(saga) {
 
 /** One-line summary for the CLI listing. */
 export function sagaSummary(saga) {
-  const target = saga.clubs[0] ? ` → ${saga.clubs[0]}` : "";
-  return `${saga.player}${target} | day ${saga.day} | ${stageLabel(saga.stage)} | ${saga.events.length} tips from ${new Set(saga.events.map((e) => e.handle)).size} source(s)`;
+  return `${moveLabel(saga.player, saga.move)} | day ${saga.day} | ${stageLabel(saga.stage)} | ${saga.events.length} tips from ${new Set(saga.events.map((e) => e.handle)).size} source(s)`;
 }

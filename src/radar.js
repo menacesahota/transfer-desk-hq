@@ -9,7 +9,7 @@
  * It is presented as the desk's read, not a statistical claim.
  */
 
-import { stageRank } from "./entities.js";
+import { stageRank, resolveMove, moveLabel } from "./entities.js";
 
 const ACTIVE_DAYS = Number(process.env.RADAR_ACTIVE_DAYS || 14);
 const MAX_ITEMS = Number(process.env.RADAR_MAX_ITEMS || 5);
@@ -69,14 +69,15 @@ export function computeOdds(log, { now = Date.now() } = {}) {
 
     score = Math.round(Math.max(5, Math.min(92, score)));
 
-    const clubs = [...events].reverse().find((e) => e.clubs?.length)?.clubs || [];
+    const move = resolveMove(events);
     items.push({
       playerKey: key,
       player: events
         .map((e) => e.player)
         .filter(Boolean)
         .sort((a, b) => b.length - a.length)[0],
-      club: clubs[0] || null,
+      to: move.to,
+      from: move.from,
       stage: topStage,
       sources: handles.length,
       lead: events[0].handle,
@@ -104,10 +105,9 @@ export function buildRadarPost(items, now = new Date()) {
   const date = now.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   const header = `RUMOUR RADAR | ${date}\n\nDesk odds on the moves being talked about:`;
 
-  let lines = items.map((i) => {
-    const move = i.club ? `${i.player} → ${i.club}` : i.player;
-    return `${bar(i.likelihood)} ${i.likelihood}% ${move}`;
-  });
+  let lines = items.map(
+    (i) => `${bar(i.likelihood)} ${i.likelihood}% ${moveLabel(i.player, i)}`
+  );
 
   let post = `${header}\n\n${lines.join("\n")}`;
   while (post.length > 280 && lines.length > 3) {
