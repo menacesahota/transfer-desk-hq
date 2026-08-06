@@ -2,7 +2,7 @@ import "dotenv/config";
 import { fetchNews } from "./news.js";
 import { hasXCredentials, hasBearer, getUserClient } from "./x-client.js";
 import { ensureDirs, postTweet } from "./post.js";
-import { logCycleTips, runExtras, emitPulse } from "./extras.js";
+import { logCycleTips, runExtras, emitPulse, describeError } from "./extras.js";
 import { loadLog, loadState, saveState, markPosted } from "./store.js";
 import { findClusters, buildConsensusPost } from "./consensus.js";
 import { buildSagas, sagaSummary, buildSagaPost } from "./saga.js";
@@ -207,6 +207,6 @@ if (!runners[cmd]) {
 }
 
 runners[cmd]().catch((err) => {
-  console.error(err?.data || err);
+  console.error(describeError(err));
   process.exit(1);
 });
