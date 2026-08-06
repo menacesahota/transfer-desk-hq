@@ -1,13 +1,13 @@
 import "dotenv/config";
 import { fetchNews } from "./news.js";
 import { hasXCredentials, hasBearer, getUserClient } from "./x-client.js";
-import { ensureDirs } from "./post.js";
+import { ensureDirs, postTweet } from "./post.js";
 import { logCycleTips, runExtras, emitPulse } from "./extras.js";
-import { loadLog } from "./store.js";
+import { loadLog, loadState, saveState, markPosted } from "./store.js";
 import { findClusters, buildConsensusPost } from "./consensus.js";
 import { buildSagas, sagaSummary, buildSagaPost } from "./saga.js";
 import { computeScores, buildScorecardPost } from "./scorecard.js";
-import { computeOdds, buildRadarPost } from "./radar.js";
+import { computeOdds, buildRadarPost, radarPostKey } from "./radar.js";
 
 const cmd = process.argv[2] || "news";
 
@@ -140,10 +140,18 @@ async function scorecard() {
 async function radar() {
   const items = computeOdds(await loadLog());
   if (!items.length) return console.log("No active rumours in the log yet.");
-  console.log(buildRadarPost(items));
+  const post = buildRadarPost(items);
+  console.log(post);
   console.log(
     "\n" + items.map((i) => `${i.player}: ${i.sources} source(s), stage ${i.stage}, lead @${i.lead}`).join("\n")
   );
+  if (process.argv[3] === "--post") {
+    const posted = await postTweet(post);
+    console.log(`\nPosted: https://x.com/TransferDeskHQ/status/${posted.id}`);
+    const state = await loadState();
+    markPosted(state, radarPostKey());
+    await saveState(state);
+  }
 }
 
 async function pulse() {
