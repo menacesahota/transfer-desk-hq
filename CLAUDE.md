@@ -21,6 +21,7 @@ npm run consensus # preview multi-source story clusters
 npm run sagas     # list active per-player transfer sagas
 npm run scorecard # breaker reliability table
 npm run pulse     # digest of last PULSE_HOURS + image card (add --post to publish)
+npm run radar     # daily rumour likelihood rankings (auto-posts after RADAR_HOUR UTC)
 ```
 
 ## Layout
@@ -29,7 +30,7 @@ npm run pulse     # digest of last PULSE_HOURS + image card (add --post to publi
 - src/news.js, rewrite.js, post.js, filter.js, media.js, x-client.js
 - src/entities.js — player/club/stage extraction shared by desk features
 - src/store.js — persistent tip log (data/tiplog.json) + feature state
-- src/consensus.js, saga.js, scorecard.js, pulse.js — desk features
+- src/consensus.js, saga.js, scorecard.js, pulse.js, radar.js — desk features
 - src/extras.js — orchestrates feature posts inside the watch cycle
 - drafts/ — generated drafts
 - .env.example — X OAuth 1.0a keys, optional OPENAI_API_KEY, POST_MODE

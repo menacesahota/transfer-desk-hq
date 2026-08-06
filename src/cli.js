@@ -7,6 +7,7 @@ import { loadLog } from "./store.js";
 import { findClusters, buildConsensusPost } from "./consensus.js";
 import { buildSagas, sagaSummary, buildSagaPost } from "./saga.js";
 import { computeScores, buildScorecardPost } from "./scorecard.js";
+import { computeOdds, buildRadarPost } from "./radar.js";
 
 const cmd = process.argv[2] || "news";
 
@@ -136,6 +137,15 @@ async function scorecard() {
   console.log(buildScorecardPost(scores));
 }
 
+async function radar() {
+  const items = computeOdds(await loadLog());
+  if (!items.length) return console.log("No active rumours in the log yet.");
+  console.log(buildRadarPost(items));
+  console.log(
+    "\n" + items.map((i) => `${i.player}: ${i.sources} source(s), stage ${i.stage}, lead @${i.lead}`).join("\n")
+  );
+}
+
 async function pulse() {
   const publish = process.env.POST_MODE === "post" && process.argv[3] === "--post";
   await ensureDirs();
@@ -152,11 +162,12 @@ const runners = {
   sagas,
   scorecard,
   pulse,
+  radar,
 };
 
 if (!runners[cmd]) {
   console.log(
-    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse"
+    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar"
   );
   process.exit(1);
 }

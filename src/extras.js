@@ -10,9 +10,12 @@ import { findClusters, clusterPostKey, buildConsensusPost } from "./consensus.js
 import { buildSagas, sagaPostKey, buildSagaPost } from "./saga.js";
 import { computeScores, scorecardPostKey, buildScorecardPost } from "./scorecard.js";
 import { buildPulse, buildPulsePost, pulsePostKey, renderPulseCard } from "./pulse.js";
+import { computeOdds, radarPostKey, buildRadarPost } from "./radar.js";
 import { postTweet, saveDraft } from "./post.js";
 
 const MAX_EXTRAS_PER_CYCLE = Number(process.env.MAX_EXTRAS_PER_CYCLE || 2);
+const RADAR_HOUR = Number(process.env.RADAR_HOUR ?? 9); // UTC hour; -1 = off
+const RADAR_MIN_ITEMS = Number(process.env.RADAR_MIN_ITEMS || 3);
 const SCORECARD_DAY = Number(process.env.SCORECARD_DAY ?? 0); // 0 = Sunday, -1 = off
 const PULSE_EVERY_CYCLES = Number(process.env.PULSE_EVERY_CYCLES || 0); // 0 = manual only
 
@@ -91,7 +94,21 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
     }
   }
 
-  // 4) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
+  // 4) Daily rumour radar (first cycle after RADAR_HOUR UTC)
+  if (RADAR_HOUR >= 0 && new Date().getUTCHours() >= RADAR_HOUR) {
+    const key = radarPostKey();
+    if (!hasPosted(state, key)) {
+      const items = computeOdds(log);
+      if (items.length >= RADAR_MIN_ITEMS) {
+        const text = buildRadarPost(items);
+        console.log(`\n[radar]\n${text}\n`);
+        await publishExtra({ text, kind: "radar", publish });
+        markPosted(state, key);
+      }
+    }
+  }
+
+  // 5) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
   if (PULSE_EVERY_CYCLES > 0 && cycleCount > 0 && cycleCount % PULSE_EVERY_CYCLES === 0) {
     await emitPulse({ publish, state });
   }

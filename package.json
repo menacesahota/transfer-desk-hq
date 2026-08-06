@@ -13,7 +13,8 @@
     "consensus": "node src/cli.js consensus",
     "sagas": "node src/cli.js sagas",
     "scorecard": "node src/cli.js scorecard",
-    "pulse": "node src/cli.js pulse"
+    "pulse": "node src/cli.js pulse",
+    "radar": "node src/cli.js radar"
   },
   "engines": {
     "node": ">=20"
