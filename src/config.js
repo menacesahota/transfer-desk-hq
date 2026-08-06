@@ -14,6 +14,30 @@ export const BREAKERS = [
   { handle: "DuncanCastles", label: "Duncan Castles", weight: 6 },
   { handle: "IndyFootball", label: "The Independent Football", weight: 5 },
   { handle: "Plettigoal", label: "Plettigoal", weight: 7 },
+
+  // Club correspondents — 2026-27 Premier League, one per club (David_Ornstein
+  // above already covers Arsenal). Mostly Athletic beat writers; a few strong
+  // local-paper reporters where that's the best-connected voice on the club.
+  { handle: "greggevans40", label: "Gregg Evans (Aston Villa)", weight: 8 },
+  { handle: "AlexSmithEcho", label: "Alexander Smith (Bournemouth)", weight: 6 },
+  { handle: "AndyNaylorBHAFC", label: "Andy Naylor (Brighton)", weight: 8 },
+  { handle: "SJohnsonSport", label: "Simon Johnson (Chelsea)", weight: 8 },
+  { handle: "AndyTurnerccfc", label: "Andy Turner (Coventry City)", weight: 6 },
+  { handle: "MattWoosie", label: "Matt Woosnam (Crystal Palace)", weight: 8 },
+  { handle: "Paddy_Boyland", label: "Patrick Boyland (Everton)", weight: 8 },
+  { handle: "peterrutzler", label: "Peter Rutzler (Fulham)", weight: 8 },
+  { handle: "PJBuckingham", label: "Philip Buckingham (Hull City)", weight: 7 },
+  { handle: "Stuart_Watson", label: "Stuart Watson (Ipswich Town)", weight: 7 },
+  { handle: "BerenCross", label: "Beren Cross (Leeds United)", weight: 8 },
+  { handle: "JamesPearceLFC", label: "James Pearce (Liverpool)", weight: 8 },
+  { handle: "SamLee", label: "Sam Lee (Manchester City)", weight: 8 },
+  { handle: "lauriewhitwell", label: "Laurie Whitwell (Manchester United)", weight: 8 },
+  { handle: "ChrisDHWaugh", label: "Chris Waugh (Newcastle United)", weight: 8 },
+  { handle: "nottmtails", label: "Paul Taylor (Nottingham Forest)", weight: 7 },
+  { handle: "RichMennear", label: "Richard Mennear (Sunderland)", weight: 6 },
+  { handle: "AlasdairGold", label: "Alasdair Gold (Tottenham)", weight: 8 },
+  // Brentford: no single dominant beat-insider identified — worth a manual
+  // pick if you follow one closely; leaving out rather than guessing.
 ];
 
 /** Free RSS feeds used when X read access is not configured yet. */
