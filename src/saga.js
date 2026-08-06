@@ -4,7 +4,7 @@
  * post a "Day N" timeline update, threaded onto the previous saga post.
  */
 
-import { stageRank, stageLabel, resolveMove, moveLabel } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer } from "./entities.js";
 
 const SAGA_MIN_EVENTS = Number(process.env.SAGA_MIN_EVENTS || 2);
 const SAGA_MAX_AGE_DAYS = Number(process.env.SAGA_MAX_AGE_DAYS || 45);
@@ -37,9 +37,12 @@ export function buildSagas(log, { now = Date.now() } = {}) {
     );
     const move = resolveMove(events);
 
+    const player = events.map(entryPlayer).filter(Boolean).sort((a, b) => b.length - a.length)[0];
+    if (!player) continue; // story has no credible player (club/manager news)
+
     sagas.push({
       playerKey: key,
-      player: events.map((e) => e.player).filter(Boolean).sort((a, b) => b.length - a.length)[0],
+      player,
       day,
       stage: topStage,
       done: topStage === "done",

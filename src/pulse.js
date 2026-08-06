@@ -6,7 +6,7 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { stageLabel, moveLabel, entryDirection } from "./entities.js";
+import { stageLabel, moveLabel, entryDirection, entryPlayer } from "./entities.js";
 
 /** Per-entry direction with safe fallback for entries logged before direction parsing. */
 function entryMove(e) {
@@ -49,7 +49,7 @@ export function buildPulse(log, { hours = PULSE_HOURS, now = Date.now() } = {}) 
 
 function itemLine(e) {
   const fee = e.fee != null ? ` £${e.fee}m` : "";
-  return `${moveLabel(e.player || "Unnamed move", entryMove(e))}${fee}`;
+  return `${moveLabel(entryPlayer(e) || "Unnamed move", entryMove(e))}${fee}`;
 }
 
 export function pulsePostKey(now = new Date()) {
@@ -98,7 +98,9 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
   for (const stage of order) {
     for (const e of pulse.byStage[stage].slice(0, stage === "done" ? 5 : 3)) {
       const mv = entryMove(e);
-      rows.push({ stage, player: e.player || "Unnamed move", to: mv.to, from: mv.from, fee: e.fee, handle: e.handle });
+      const name = entryPlayer(e);
+      if (!name) continue; // skip club/manager chatter on the card
+      rows.push({ stage, player: name, to: mv.to, from: mv.from, fee: e.fee, handle: e.handle });
       if (rows.length >= 6) break;
     }
     if (rows.length >= 6) break;

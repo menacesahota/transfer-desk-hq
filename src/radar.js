@@ -9,7 +9,7 @@
  * It is presented as the desk's read, not a statistical claim.
  */
 
-import { stageRank, resolveMove, moveLabel } from "./entities.js";
+import { stageRank, resolveMove, moveLabel, entryPlayer } from "./entities.js";
 
 const ACTIVE_DAYS = Number(process.env.RADAR_ACTIVE_DAYS || 14);
 const MAX_ITEMS = Number(process.env.RADAR_MAX_ITEMS || 5);
@@ -73,7 +73,7 @@ export function computeOdds(log, { now = Date.now() } = {}) {
     items.push({
       playerKey: key,
       player: events
-        .map((e) => e.player)
+        .map(entryPlayer)
         .filter(Boolean)
         .sort((a, b) => b.length - a.length)[0],
       to: move.to,

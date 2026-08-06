@@ -4,7 +4,7 @@
  * post a tiered "confirmed by N sources" update crediting who broke it first.
  */
 
-import { stageRank, stageLabel, resolveMove, moveLabel } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer } from "./entities.js";
 
 const WINDOW_HOURS = Number(process.env.CONSENSUS_WINDOW_HOURS || 12);
 const MIN_SOURCES = Number(process.env.CONSENSUS_MIN_SOURCES || 2);
@@ -62,9 +62,9 @@ export function findClusters(log, { windowHours = WINDOW_HOURS, now = Date.now()
 }
 
 function pickBestName(entries) {
-  // Longest extracted name is usually the fullest
+  // Longest validated name is usually the fullest
   return entries
-    .map((e) => e.player)
+    .map(entryPlayer)
     .filter(Boolean)
     .sort((a, b) => b.length - a.length)[0];
 }

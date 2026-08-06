@@ -24,8 +24,8 @@ export const CLUBS = [
   { name: "Leeds", aliases: ["leeds united", "leeds", "#lufc"] },
   { name: "Sunderland", aliases: ["sunderland", "#safc"] },
   { name: "Burnley", aliases: ["burnley", "clarets"] },
-  { name: "Ipswich", aliases: ["ipswich"] },
-  { name: "Leicester", aliases: ["leicester"] },
+  { name: "Ipswich", aliases: ["ipswich town", "ipswich", "#itfc"] },
+  { name: "Leicester", aliases: ["leicester city", "leicester", "#lcfc"] },
   { name: "Southampton", aliases: ["southampton", "saints"] },
   { name: "Liverpool", aliases: ["liverpool", "#lfc"] },
   { name: "Manchester United", aliases: ["manchester united", "man united", "man utd", "#mufc"] },
@@ -107,7 +107,7 @@ const STAGE_PATTERNS = [
   ["agreement", /\b(agreement|agreed|personal terms|verbal agreement|set to sign|set to join|close to signing|close to joining|closing in on|on the verge|poised to)\b/i],
   ["bid", /\b(bid|offer|proposal|tabled|submitted|rejected|turned down|knocked back)\b/i],
   ["talks", /\b(talks|negotiations|discussions|meeting|contact)\b/i],
-  ["interest", /\b(interest|interested|monitoring|tracking|targeting|eyeing|keen on|linked|enquir|inquir|scouting|shortlist)\b/i],
+  ["interest", /\b(interest|interested|monitoring|tracking|targeting|eyeing|keen on|linked|enquir|inquir|scouting|shortlist|wants? to sign|looking to sign|pushing to sign|keeping tabs)\b/i],
 ];
 
 const STAGE_RANK = Object.fromEntries(STAGES.map((s) => [s.stage, s.rank]));
@@ -224,8 +224,11 @@ const NOT_NAME_WORDS = new Set([
   "saturday", "sunday", "sky", "sports", "bbc", "cnn", "espn", "word",
   "reports", "rumour", "rumor", "transfer", "window", "deadline", "day",
   "more", "after", "before", "with", "from", "for", "and", "but", "his",
-  "her", "their", "this", "that", "los", "las", "el", "la", "de", "di",
+  "her", "their", "this", "that", "liga", "clasico", "clásico",
 ]);
+
+/** Non-player roles: a name right after one of these is staff, not a player. */
+const ROLE_BEFORE = /(?:chairman|chairwoman|chief executive|ceo|president|owner|manager|head coach|coach|boss|sporting director|director|agent|journalist|reporter|scout)\s*$/i;
 
 const CLUB_WORDS = new Set(
   CLUBS.flatMap((c) => [
@@ -233,6 +236,36 @@ const CLUB_WORDS = new Set(
     ...c.aliases.flatMap((a) => a.replace(/^#/, "").split(/\s+/)),
   ])
 );
+
+/** Generic club-name suffixes: "Ipswich Town", "Leicester City", "Bolton Wanderers"… */
+const CLUB_SUFFIX_WORDS = new Set([
+  "town", "city", "united", "utd", "albion", "rovers", "wanderers", "county",
+  "athletic", "hotspur", "palace", "forest", "argyle", "orient", "rangers",
+  "wednesday", "north", "end", "fc", "afc",
+]);
+
+function isClubWord(w) {
+  const clean = w.replace(/['’]s$/, "");
+  return CLUB_WORDS.has(clean) || CLUB_SUFFIX_WORDS.has(clean);
+}
+
+/** True if a "name" is really a club: every word is a club word or suffix. */
+export function isClubbish(name) {
+  if (!name) return false;
+  const words = name.toLowerCase().replace(/[.,!?]+$/, "").split(/\s+/);
+  return words.length > 0 && words.every(isClubWord);
+}
+
+/**
+ * Trustworthy player name for a log entry. Stored names that are actually
+ * clubs (logged by older parser versions) are re-extracted from the
+ * original text; returns null when there is no credible player.
+ */
+export function entryPlayer(e) {
+  if (e?.player && !isClubbish(e.player)) return e.player;
+  const fresh = extractPlayer(e?.original || "");
+  return fresh && !isClubbish(fresh) ? fresh : null;
+}
 
 /**
  * Best-effort player name extraction: first run of 2–4 capitalised words
@@ -248,26 +281,31 @@ export function extractPlayer(text) {
     .replace(/[.!?,;:]\s+/g, " ¦ ");
 
   const NAME_TOKEN = "\\p{Lu}[\\p{L}'’.-]+";
-  const runRe = new RegExp(`(?:${NAME_TOKEN})(?:\\s+(?:${NAME_TOKEN})){1,3}`, "gu");
-
-  const clubWord = (w) => CLUB_WORDS.has(w.replace(/['’]s$/, ""));
+  // Lowercase particles allowed inside names: de Ligt, van Dijk, dos Santos…
+  const PARTICLE = "(?:de|del|della|di|da|van|von|der|den|ter|ten|la|le|dos|das|el|al)";
+  const runRe = new RegExp(
+    `(?:${NAME_TOKEN})(?:\\s+(?:${PARTICLE}\\s+)?(?:${NAME_TOKEN})){1,3}`,
+    "gu"
+  );
 
   for (const m of clean.matchAll(runRe)) {
+    // Skip staff names: "Crystal Palace chairman Steve Parish", "boss Mikel Arteta"
+    if (ROLE_BEFORE.test(clean.slice(0, m.index))) continue;
     const words = m[0].split(/\s+/);
     const lowerWords = words.map((w) => w.toLowerCase().replace(/[.,!?]+$/, ""));
     if (lowerWords.some((w) => NOT_NAME_WORDS.has(w))) continue;
-    if (lowerWords.every(clubWord)) continue;
+    if (lowerWords.every(isClubWord)) continue;
     // Drop leading club words ("Tottenham's Ashley Phillips" → "Ashley Phillips")
-    while (lowerWords.length > 1 && clubWord(lowerWords[0])) {
+    while (lowerWords.length > 1 && isClubWord(lowerWords[0])) {
       lowerWords.shift();
       words.shift();
     }
     // Drop trailing club words ("Alexander Isak Newcastle" → "Alexander Isak")
-    while (lowerWords.length > 1 && clubWord(lowerWords[lowerWords.length - 1])) {
+    while (lowerWords.length > 1 && isClubWord(lowerWords[lowerWords.length - 1])) {
       lowerWords.pop();
       words.pop();
     }
-    if (words.length < 2 || lowerWords.some(clubWord)) continue;
+    if (words.length < 2 || lowerWords.some(isClubWord)) continue;
     return words.join(" ").replace(/[.,!?]+$/, "");
   }
   return null;
