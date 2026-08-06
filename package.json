@@ -15,7 +15,8 @@
     "scorecard": "node src/cli.js scorecard",
     "pulse": "node src/cli.js pulse",
     "radar": "node src/cli.js radar",
-    "contracts": "node src/cli.js contracts"
+    "contracts": "node src/cli.js contracts",
+    "smoketest": "node src/cli.js smoketest"
   },
   "engines": {
     "node": ">=20"

@@ -16,6 +16,7 @@ import {
   contractWatchPostKey,
   buildContractWatchPost,
 } from "./contractwatch.js";
+import { SMOKETEST_KEY, smokeTestEnabled, buildSmokeTestPost } from "./smoketest.js";
 import { postTweet, saveDraft } from "./post.js";
 
 const MAX_EXTRAS_PER_CYCLE = Number(process.env.MAX_EXTRAS_PER_CYCLE || 2);
@@ -76,9 +77,23 @@ async function publishExtra({ text, kind, publish, replyTo, localImage }) {
  * plus the weekly scorecard and optional pulse.
  */
 export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
+  const state = await loadState();
+
+  // 0) One-time pipeline smoke test — doesn't need any tip data, so it can
+  // fire on the very first cycle and give an immediate yes/no signal on
+  // whether posting actually works. Never counts against the per-cycle cap;
+  // keeps quietly retrying each cycle until it succeeds once, then never
+  // runs again.
+  if (smokeTestEnabled() && !hasPosted(state, SMOKETEST_KEY)) {
+    const text = buildSmokeTestPost();
+    console.log(`\n[smoketest]\n${text}\n`);
+    const result = await publishExtra({ text, kind: "smoketest", publish });
+    if (result.ok) markPosted(state, SMOKETEST_KEY);
+    await saveState(state);
+  }
+
   const log = await loadLog();
   if (!log.length) return;
-  const state = await loadState();
   let emitted = 0;
 
   // Every step below is isolated (publishExtra never throws) and state is

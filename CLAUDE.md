@@ -23,6 +23,7 @@ npm run scorecard # breaker reliability table
 npm run pulse     # digest of last PULSE_HOURS + image card (add --post to publish)
 npm run radar     # daily rumour likelihood rankings (auto-posts after RADAR_HOUR UTC)
 npm run contracts # daily contract watch: renewals/extensions (auto-posts after CONTRACTWATCH_HOUR UTC)
+npm run smoketest # preview/force the one-time "posting works" pipeline check (add --post to publish)
 ```
 
 ## Layout
@@ -32,6 +33,7 @@ npm run contracts # daily contract watch: renewals/extensions (auto-posts after 
 - src/entities.js — player/club/stage extraction shared by desk features
 - src/store.js — persistent tip log (data/tiplog.json) + feature state
 - src/consensus.js, saga.js, scorecard.js, pulse.js, radar.js, contractwatch.js — desk features
+- src/smoketest.js — one-time "posting works" pipeline check, fires before real desk content
 - src/extras.js — orchestrates feature posts inside the watch cycle
 - drafts/ — generated drafts
 - .env.example — X OAuth 1.0a keys, optional OPENAI_API_KEY, POST_MODE

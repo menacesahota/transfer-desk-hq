@@ -13,6 +13,7 @@ import {
   buildContractWatchPost,
   contractWatchPostKey,
 } from "./contractwatch.js";
+import { buildSmokeTestPost, SMOKETEST_KEY } from "./smoketest.js";
 
 const cmd = process.argv[2] || "news";
 
@@ -185,6 +186,21 @@ async function pulse() {
   await emitPulse({ publish, hours: Number(process.env.PULSE_HOURS || 24) });
 }
 
+async function smoketest() {
+  const post = buildSmokeTestPost();
+  console.log(post);
+  if (process.argv[3] === "--post") {
+    const posted = await postTweet(post);
+    console.log(`\nPosted: https://x.com/TransferDeskHQ/status/${posted.id}`);
+    console.log("Credentials and posting are confirmed working.");
+    const state = await loadState();
+    markPosted(state, SMOKETEST_KEY);
+    await saveState(state);
+  } else {
+    console.log("\n(Preview only — add --post to actually publish and confirm credentials work.)");
+  }
+}
+
 const runners = {
   verify,
   news,
@@ -197,11 +213,12 @@ const runners = {
   pulse,
   radar,
   contracts,
+  smoketest,
 };
 
 if (!runners[cmd]) {
   console.log(
-    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts"
+    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts | smoketest"
   );
   process.exit(1);
 }
