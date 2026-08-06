@@ -9,7 +9,11 @@
     "watch": "node src/cli.js watch",
     "draft": "node src/cli.js draft",
     "post": "node src/cli.js post",
-    "verify": "node src/cli.js verify"
+    "verify": "node src/cli.js verify",
+    "consensus": "node src/cli.js consensus",
+    "sagas": "node src/cli.js sagas",
+    "scorecard": "node src/cli.js scorecard",
+    "pulse": "node src/cli.js pulse"
   },
   "engines": {
     "node": ">=20"

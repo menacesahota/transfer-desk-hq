@@ -68,7 +68,7 @@ export async function saveDraft(tip) {
   return file;
 }
 
-export async function postTweet(text, { localImage, imageContentType, imageUrl } = {}) {
+export async function postTweet(text, { localImage, imageContentType, imageUrl, replyTo } = {}) {
   const client = getUserClient();
   let mediaIds;
 
@@ -84,9 +84,10 @@ export async function postTweet(text, { localImage, imageContentType, imageUrl }
     }
   }
 
-  const result = mediaIds?.length
-    ? await client.v2.tweet({ text, media: { media_ids: mediaIds } })
-    : await client.v2.tweet(text);
+  const payload = { text };
+  if (mediaIds?.length) payload.media = { media_ids: mediaIds };
+  if (replyTo) payload.reply = { in_reply_to_tweet_id: String(replyTo) };
 
+  const result = await client.v2.tweet(payload);
   return result.data;
 }

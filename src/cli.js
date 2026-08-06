@@ -9,6 +9,11 @@ import {
   postTweet,
   enrichTipWithImage,
 } from "./post.js";
+import { logCycleTips, runExtras, emitPulse } from "./extras.js";
+import { loadLog } from "./store.js";
+import { findClusters, buildConsensusPost } from "./consensus.js";
+import { buildSagas, sagaSummary, buildSagaPost } from "./saga.js";
+import { computeScores, buildScorecardPost } from "./scorecard.js";
 
 const cmd = process.argv[2] || "news";
 
@@ -63,7 +68,7 @@ async function news() {
   }
 }
 
-async function draftOrPost({ publish }) {
+async function draftOrPost({ publish, cycleCount = 0 }) {
   await ensureDirs();
   const seen = await loadSeen();
   const perSource = Number(process.env.POSTS_PER_SOURCE || 5);
@@ -74,9 +79,15 @@ async function draftOrPost({ publish }) {
     for (const e of errors) console.log(`  API: @${e.handle || "?"}: ${e.error}`);
   }
 
+  // Log every newsworthy tip for consensus/saga/scorecard/pulse, even ones we
+  // don't relay this cycle.
+  const logged = await logCycleTips(tips.filter((t) => t.source !== "error"));
+  if (logged.length) console.log(`Logged ${logged.length} tip(s) to the desk history.`);
+
   const fresh = tips.filter((t) => t.source !== "error" && !seen.has(t.id));
   if (!fresh.length) {
     console.log("No new breaking tips.");
+    await runExtras({ publish });
     return;
   }
 
@@ -102,14 +113,17 @@ async function draftOrPost({ publish }) {
   }
 
   await saveSeen(seen);
+  await runExtras({ publish, cycleCount });
 }
 
 async function watch() {
   const mode = process.env.POST_MODE === "post" ? "post" : "draft";
   console.log(`Watching every 10 minutes (Ctrl+C to stop). Mode: ${mode}\n`);
+  let cycle = 0;
   const tick = async () => {
+    cycle++;
     try {
-      await draftOrPost({ publish: mode === "post" });
+      await draftOrPost({ publish: mode === "post", cycleCount: cycle });
     } catch (err) {
       console.error("Watch cycle error:", err.message);
     }
@@ -118,16 +132,62 @@ async function watch() {
   setInterval(tick, 10 * 60 * 1000);
 }
 
+/* -------- desk data commands (read from the tip log) -------- */
+
+async function consensus() {
+  const clusters = findClusters(await loadLog());
+  if (!clusters.length) return console.log("No multi-source stories in the window.");
+  for (const c of clusters) {
+    console.log("─".repeat(48));
+    console.log(buildConsensusPost(c));
+    console.log();
+  }
+}
+
+async function sagas() {
+  const list = buildSagas(await loadLog());
+  if (!list.length) return console.log("No active sagas yet (need 2+ tips per player).");
+  for (const s of list) {
+    console.log("─".repeat(48));
+    console.log(sagaSummary(s));
+    console.log();
+    console.log(buildSagaPost(s));
+    console.log();
+  }
+}
+
+async function scorecard() {
+  const scores = computeScores(await loadLog());
+  if (!scores.length) {
+    return console.log(
+      "Not enough settled claims yet - the scorecard needs a few weeks of logged tips."
+    );
+  }
+  console.log(buildScorecardPost(scores));
+}
+
+async function pulse() {
+  const publish = process.env.POST_MODE === "post" && process.argv[3] === "--post";
+  await ensureDirs();
+  await emitPulse({ publish, hours: Number(process.env.PULSE_HOURS || 24) });
+}
+
 const runners = {
   verify,
   news,
   draft: () => draftOrPost({ publish: false }),
   post: () => draftOrPost({ publish: true }),
   watch,
+  consensus,
+  sagas,
+  scorecard,
+  pulse,
 };
 
 if (!runners[cmd]) {
-  console.log("Usage: npm run news | draft | post | watch | verify");
+  console.log(
+    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse"
+  );
   process.exit(1);
 }
 
