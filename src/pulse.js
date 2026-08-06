@@ -100,8 +100,8 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
   };
 
   const INK = "#131313";
-  const INK_SOFT = "#57513a";
-  const INK_FAINT = "#6e6636";
+  const INK_SOFT = "#5f6368";
+  const INK_FAINT = "#8b9096";
   const YELLOW = "#ffff00";
 
   const FONT = `Arial, 'Helvetica Neue', 'DejaVu Sans', sans-serif`;
@@ -164,9 +164,9 @@ export async function renderPulseCard(pulse, { outDir } = {}) {
 <svg width="1200" height="675" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffff00"/>
-      <stop offset="0.55" stop-color="#fff700"/>
-      <stop offset="1" stop-color="#ffe600"/>
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#fbfbfb"/>
+      <stop offset="1" stop-color="#f1f2f4"/>
     </linearGradient>
     <radialGradient id="glow" cx="0.85" cy="0.1" r="0.9">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.08"/>
