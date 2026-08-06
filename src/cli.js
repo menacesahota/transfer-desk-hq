@@ -8,6 +8,11 @@ import { findClusters, buildConsensusPost } from "./consensus.js";
 import { buildSagas, sagaSummary, buildSagaPost } from "./saga.js";
 import { computeScores, buildScorecardPost } from "./scorecard.js";
 import { computeOdds, buildRadarPost, radarPostKey } from "./radar.js";
+import {
+  computeContractWatch,
+  buildContractWatchPost,
+  contractWatchPostKey,
+} from "./contractwatch.js";
 
 const cmd = process.argv[2] || "news";
 
@@ -154,6 +159,26 @@ async function radar() {
   }
 }
 
+async function contracts() {
+  const items = computeContractWatch(await loadLog());
+  if (!items.length) return console.log("No contract renewal stories in the window yet.");
+  const post = buildContractWatchPost(items);
+  console.log(post);
+  console.log(
+    "\n" +
+      items
+        .map((i) => `${i.player}: ${i.phase}${i.club ? ` at ${i.club}` : ""}, ${i.sources} source(s), lead @${i.lead}`)
+        .join("\n")
+  );
+  if (process.argv[3] === "--post") {
+    const posted = await postTweet(post);
+    console.log(`\nPosted: https://x.com/TransferDeskHQ/status/${posted.id}`);
+    const state = await loadState();
+    markPosted(state, contractWatchPostKey());
+    await saveState(state);
+  }
+}
+
 async function pulse() {
   const publish = process.env.POST_MODE === "post" && process.argv[3] === "--post";
   await ensureDirs();
@@ -171,11 +196,12 @@ const runners = {
   scorecard,
   pulse,
   radar,
+  contracts,
 };
 
 if (!runners[cmd]) {
   console.log(
-    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar"
+    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts"
   );
   process.exit(1);
 }

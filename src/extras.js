@@ -11,11 +11,18 @@ import { buildSagas, sagaPostKey, buildSagaPost } from "./saga.js";
 import { computeScores, scorecardPostKey, buildScorecardPost } from "./scorecard.js";
 import { buildPulse, buildPulsePost, pulsePostKey, renderPulseCard } from "./pulse.js";
 import { computeOdds, radarPostKey, buildRadarPost } from "./radar.js";
+import {
+  computeContractWatch,
+  contractWatchPostKey,
+  buildContractWatchPost,
+} from "./contractwatch.js";
 import { postTweet, saveDraft } from "./post.js";
 
 const MAX_EXTRAS_PER_CYCLE = Number(process.env.MAX_EXTRAS_PER_CYCLE || 2);
 const RADAR_HOUR = Number(process.env.RADAR_HOUR ?? 9); // UTC hour; -1 = off
 const RADAR_MIN_ITEMS = Number(process.env.RADAR_MIN_ITEMS || 3);
+const CONTRACTWATCH_HOUR = Number(process.env.CONTRACTWATCH_HOUR ?? 11); // UTC hour; -1 = off
+const CONTRACTWATCH_MIN_ITEMS = Number(process.env.CONTRACTWATCH_MIN_ITEMS || 2);
 const SCORECARD_DAY = Number(process.env.SCORECARD_DAY ?? 0); // 0 = Sunday, -1 = off
 const PULSE_EVERY_CYCLES = Number(process.env.PULSE_EVERY_CYCLES || 0); // 0 = manual only
 
@@ -108,7 +115,21 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
     }
   }
 
-  // 5) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
+  // 5) Daily contract watch — renewals, which the radar deliberately excludes
+  if (CONTRACTWATCH_HOUR >= 0 && new Date().getUTCHours() >= CONTRACTWATCH_HOUR) {
+    const key = contractWatchPostKey();
+    if (!hasPosted(state, key)) {
+      const items = computeContractWatch(log);
+      if (items.length >= CONTRACTWATCH_MIN_ITEMS) {
+        const text = buildContractWatchPost(items);
+        console.log(`\n[contractwatch]\n${text}\n`);
+        await publishExtra({ text, kind: "contractwatch", publish });
+        markPosted(state, key);
+      }
+    }
+  }
+
+  // 6) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
   if (PULSE_EVERY_CYCLES > 0 && cycleCount > 0 && cycleCount % PULSE_EVERY_CYCLES === 0) {
     await emitPulse({ publish, state });
   }
