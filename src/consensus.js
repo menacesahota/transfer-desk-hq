@@ -4,7 +4,7 @@
  * post a tiered "confirmed by N sources" update crediting who broke it first.
  */
 
-import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryRenewal } from "./entities.js";
 
 const WINDOW_HOURS = Number(process.env.CONSENSUS_WINDOW_HOURS || 12);
 const MIN_SOURCES = Number(process.env.CONSENSUS_MIN_SOURCES || 2);
@@ -16,7 +16,10 @@ const MIN_SOURCES = Number(process.env.CONSENSUS_MIN_SOURCES || 2);
 export function findClusters(log, { windowHours = WINDOW_HOURS, now = Date.now() } = {}) {
   const cutoff = now - windowHours * 3600_000;
   const recent = log.filter(
-    (e) => e.playerKey && new Date(e.createdAt).getTime() >= cutoff
+    (e) =>
+      e.playerKey &&
+      new Date(e.createdAt).getTime() >= cutoff &&
+      !entryRenewal(e) // contract renewals are not transfer stories
   );
 
   const byPlayer = new Map();

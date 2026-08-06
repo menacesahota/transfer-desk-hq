@@ -174,6 +174,31 @@ const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejec
 /** Interest cues AFTER a club — the interested club is the destination. */
 const INTEREST_AFTER = /^\s*(?:are|is|have|has|remain)\s+(?:interested|keen|monitoring|tracking|keeping\s+tabs|eyeing|targeting|in\s+talks|pushing|leading\s+the\s+race|favourites)/i;
 
+/** Contract renewal / stay cues — this is not a transfer. */
+const RENEWAL_CUES = /\b(?:new (?:contract|deal|terms)|contract (?:extension|offer|renewal|talks)|extend(?:s|ed|ing)? (?:his |her |their )?(?:contract|stay|deal)|extension (?:at|with|until)|renew(?:s|ed|ing|al)?|stay(?:s|ing)? (?:at|with|put)|set to stay|expected to stay|wants? to stay|commit(?:s|ted|ting)? (?:his|her|their) future|pen(?:s|ned|ning)? a new|fresh terms|improved (?:contract|deal|terms)|(?:contract|deal) until 20\d\d|tie (?:him|her|them) down|off the market)\b/i;
+
+/**
+ * True when a tip is about a player staying / re-signing, not moving.
+ * A clear two-club transfer direction overrides renewal wording.
+ */
+export function detectRenewal(text) {
+  const raw = String(text || "");
+  if (!RENEWAL_CUES.test(raw)) return false;
+  // Transfer signals override renewal wording:
+  const { to, from } = detectDirection(raw);
+  if (from) return false; // leaving/sold-by cues = a move, not a stay
+  if (to && from && to !== from) return false;
+  if (extractClubs(raw).length >= 2) return false; // two clubs = transfer story
+  if (/\b(?:transfer )?fee\b/i.test(raw)) return false; // renewals have no fee
+  return true;
+}
+
+/** Renewal flag for a log entry; entries logged before this flag are re-analysed. */
+export function entryRenewal(e) {
+  if (typeof e?.isRenewal === "boolean") return e.isRenewal;
+  return detectRenewal(e?.original || "");
+}
+
 /**
  * Work out transfer direction: which club the player is heading to (`to`)
  * and which he is leaving (`from`). Null when the text doesn't say.
@@ -335,6 +360,7 @@ export function extractEntities(text) {
     clubs: extractClubs(text),
     toClub: to,
     fromClub: from,
+    isRenewal: detectRenewal(text),
     stage: detectStage(text),
     fee: extractFeeMillions(String(text || "")),
   };
