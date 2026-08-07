@@ -12,6 +12,11 @@ import { computeScores, scorecardPostKey, buildScorecardPost } from "./scorecard
 import { buildPulse, buildPulsePost, pulsePostKey, renderPulseCard } from "./pulse.js";
 import { computeOdds, radarPostKey, buildRadarPost } from "./radar.js";
 import {
+  computeRumourUpdates,
+  rumourWatchStateKey,
+  buildRumourWatchPost,
+} from "./rumourwatch.js";
+import {
   computeContractWatch,
   contractWatchPostKey,
   buildContractWatchPost,
@@ -133,7 +138,21 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       emitted++;
     }
 
-    // 3) Weekly scorecard
+    // 3) Rumour Watch — reactive single-story odds updates, independent of
+    // the shared consensus/saga cap (self-limited via RUMOURWATCH_MAX_PER_CYCLE)
+    for (const item of computeRumourUpdates(log, state.rumourWatch)) {
+      const text = buildRumourWatchPost(item);
+      console.log(`\n[rumourwatch] ${item.player} ${item.previous ?? "-"}% -> ${item.likelihood}%\n${text}\n`);
+      const result = await publishExtra({ text, kind: "rumourwatch", publish });
+      if (result.ok) {
+        state.rumourWatch[rumourWatchStateKey(item)] = {
+          pct: item.likelihood,
+          postedAt: new Date().toISOString(),
+        };
+      }
+    }
+
+    // 4) Weekly scorecard
     if (SCORECARD_DAY >= 0 && new Date().getDay() === SCORECARD_DAY) {
       const week = isoWeek();
       const key = scorecardPostKey(week);
@@ -148,7 +167,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       }
     }
 
-    // 4) Daily rumour radar (first cycle after RADAR_HOUR UTC)
+    // 5) Daily rumour radar (first cycle after RADAR_HOUR UTC)
     if (RADAR_HOUR >= 0 && new Date().getUTCHours() >= RADAR_HOUR) {
       const key = radarPostKey();
       if (!hasPosted(state, key)) {
@@ -162,7 +181,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       }
     }
 
-    // 5) Daily contract watch — renewals, which the radar deliberately excludes
+    // 6) Daily contract watch — renewals, which the radar deliberately excludes
     if (CONTRACTWATCH_HOUR >= 0 && new Date().getUTCHours() >= CONTRACTWATCH_HOUR) {
       const key = contractWatchPostKey();
       if (!hasPosted(state, key)) {
@@ -176,7 +195,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       }
     }
 
-    // 6) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
+    // 7) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
     if (PULSE_EVERY_CYCLES > 0 && cycleCount > 0 && cycleCount % PULSE_EVERY_CYCLES === 0) {
       await emitPulse({ publish, state });
     }

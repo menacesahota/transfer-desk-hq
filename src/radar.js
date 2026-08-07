@@ -22,8 +22,13 @@ const STAGE_BASE = {
   medical: 88,
 };
 
-/** Score all active (not done) rumours from the log, best first. */
-export function computeOdds(log, { now = Date.now() } = {}) {
+/**
+ * Score every active (not done, not renewal) rumour in the log, best first.
+ * Unlike computeOdds() this does NOT truncate to the daily top N — used by
+ * features (like rumour-watch) that need to consider every tracked story,
+ * not just the ones that make the digest.
+ */
+export function scoreAllRumours(log, { now = Date.now() } = {}) {
   const cutoff = now - ACTIVE_DAYS * 86400_000;
   const byPlayer = new Map();
 
@@ -86,17 +91,19 @@ export function computeOdds(log, { now = Date.now() } = {}) {
     });
   }
 
-  return items
-    .filter((i) => i.player)
-    .sort((a, b) => b.likelihood - a.likelihood)
-    .slice(0, MAX_ITEMS);
+  return items.filter((i) => i.player).sort((a, b) => b.likelihood - a.likelihood);
+}
+
+/** Daily-digest view: same scoring, capped to the top N for the radar post. */
+export function computeOdds(log, opts = {}) {
+  return scoreAllRumours(log, opts).slice(0, MAX_ITEMS);
 }
 
 export function radarPostKey(now = new Date()) {
   return `radar:${now.toISOString().slice(0, 10)}`; // once per day
 }
 
-function bar(pct) {
+export function bar(pct) {
   const filled = Math.round(pct / 20); // 0–5 blocks
   return "▓".repeat(filled) + "░".repeat(5 - filled);
 }

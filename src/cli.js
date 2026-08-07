@@ -14,6 +14,11 @@ import {
   contractWatchPostKey,
 } from "./contractwatch.js";
 import { buildSmokeTestPost, SMOKETEST_KEY } from "./smoketest.js";
+import {
+  computeRumourUpdates,
+  buildRumourWatchPost,
+  rumourWatchStateKey,
+} from "./rumourwatch.js";
 
 const cmd = process.argv[2] || "news";
 
@@ -186,6 +191,31 @@ async function pulse() {
   await emitPulse({ publish, hours: Number(process.env.PULSE_HOURS || 24) });
 }
 
+async function rumourwatch() {
+  const log = await loadLog();
+  const state = await loadState();
+  const due = computeRumourUpdates(log, state.rumourWatch);
+  if (!due.length) {
+    return console.log("No rumour odds have moved enough to post an update right now.");
+  }
+  for (const item of due) {
+    const post = buildRumourWatchPost(item);
+    console.log(post);
+    console.log(
+      `\n${item.player}: ${item.previous ?? "first read"} -> ${item.likelihood}%, ${item.sources} source(s), lead @${item.lead}\n`
+    );
+    if (process.argv[3] === "--post") {
+      const posted = await postTweet(post);
+      console.log(`Posted: https://x.com/TransferDeskHQ/status/${posted.id}`);
+      state.rumourWatch[rumourWatchStateKey(item)] = {
+        pct: item.likelihood,
+        postedAt: new Date().toISOString(),
+      };
+    }
+  }
+  if (process.argv[3] === "--post") await saveState(state);
+}
+
 async function smoketest() {
   const post = buildSmokeTestPost();
   console.log(post);
@@ -213,12 +243,13 @@ const runners = {
   pulse,
   radar,
   contracts,
+  rumourwatch,
   smoketest,
 };
 
 if (!runners[cmd]) {
   console.log(
-    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts | smoketest"
+    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts | rumourwatch | smoketest"
   );
   process.exit(1);
 }

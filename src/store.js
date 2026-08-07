@@ -81,13 +81,15 @@ export async function recordTips(tips, { weights = {} } = {}) {
 
 /**
  * Feature state: which consensus/saga/scorecard posts we've already made,
- * saga thread tweet ids, last scorecard week, etc.
- * Shape: { postedKeys: {key: iso}, sagaThreads: {playerKey: tweetId}, lastScorecardWeek: "2026-W32" }
+ * saga thread tweet ids, last scorecard week, rumour-watch odds history, etc.
+ * Shape: { postedKeys: {key: iso}, sagaThreads: {playerKey: tweetId},
+ *          rumourWatch: {playerKey: {pct, postedAt}} }
  */
 export async function loadState() {
   const state = await readJson(STATE_PATH, {});
   state.postedKeys ||= {};
   state.sagaThreads ||= {};
+  state.rumourWatch ||= {};
   return state;
 }
 

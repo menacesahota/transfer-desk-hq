@@ -22,6 +22,7 @@ npm run sagas     # list active per-player transfer sagas
 npm run scorecard # breaker reliability table
 npm run pulse     # digest of last PULSE_HOURS + image card (add --post to publish)
 npm run radar     # daily rumour likelihood rankings (auto-posts after RADAR_HOUR UTC)
+npm run rumourwatch # reactive per-story odds update when likelihood shifts (add --post to publish)
 npm run contracts # daily contract watch: renewals/extensions (auto-posts after CONTRACTWATCH_HOUR UTC)
 npm run smoketest # preview/force the one-time "posting works" pipeline check (add --post to publish)
 ```
@@ -32,7 +33,7 @@ npm run smoketest # preview/force the one-time "posting works" pipeline check (a
 - src/news.js, rewrite.js, post.js, filter.js, media.js, x-client.js
 - src/entities.js — player/club/stage extraction shared by desk features
 - src/store.js — persistent tip log (data/tiplog.json) + feature state
-- src/consensus.js, saga.js, scorecard.js, pulse.js, radar.js, contractwatch.js — desk features
+- src/consensus.js, saga.js, scorecard.js, pulse.js, radar.js, rumourwatch.js, contractwatch.js — desk features
 - src/smoketest.js — one-time "posting works" pipeline check, fires before real desk content
 - src/extras.js — orchestrates feature posts inside the watch cycle
 - drafts/ — generated drafts
