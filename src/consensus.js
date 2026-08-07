@@ -4,7 +4,7 @@
  * post a tiered "confirmed by N sources" update crediting who broke it first.
  */
 
-import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal, appendHashtags } from "./entities.js";
 
 const WINDOW_HOURS = Number(process.env.CONSENSUS_WINDOW_HOURS || 12);
 const MIN_SOURCES = Number(process.env.CONSENSUS_MIN_SOURCES || 2);
@@ -115,7 +115,7 @@ export function buildConsensusPost(cluster) {
   if (post.length > 280) {
     post = `${tierMark(sources)}\n\n${move}${stageStr}\n\n${firstLine}`;
   }
-  return post;
+  return appendHashtags(post, [cluster.move?.to, cluster.move?.from]);
 }
 
 function formatGap(minutes) {

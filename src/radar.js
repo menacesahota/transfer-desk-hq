@@ -9,7 +9,7 @@
  * It is presented as the desk's read, not a statistical claim.
  */
 
-import { stageRank, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
+import { stageRank, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal, appendHashtags } from "./entities.js";
 
 const ACTIVE_DAYS = Number(process.env.RADAR_ACTIVE_DAYS || 14);
 const MAX_ITEMS = Number(process.env.RADAR_MAX_ITEMS || 5);
@@ -140,17 +140,23 @@ export function buildRadarPost(items, now = new Date()) {
   const date = now.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   const header = `RUMOUR RADAR | ${date}\n\nDesk odds on the moves being talked about:`;
 
-  let lines = items.map(
-    (i) => `${bar(i.likelihood)} ${i.likelihood}% ${moveLabel(i.player, i)}`
-  );
+  // Keep `shown` in sync with `lines` through every truncation step, so the
+  // hashtags at the end only ever reference clubs whose line actually made
+  // it into the final post — not ones dropped to fit the 280-char limit.
+  let shown = items;
+  let lines = shown.map((i) => `${bar(i.likelihood)} ${i.likelihood}% ${moveLabel(i.player, i)}`);
 
   let post = `${header}\n\n${lines.join("\n")}`;
   while (post.length > 280 && lines.length > 3) {
+    shown = shown.slice(0, -1);
     lines = lines.slice(0, -1);
     post = `${header}\n\n${lines.join("\n")}`;
   }
   if (post.length > 280) {
-    post = `RUMOUR RADAR | ${date}\n\n${lines.slice(0, 3).join("\n")}`;
+    shown = shown.slice(0, 3);
+    lines = lines.slice(0, 3);
+    post = `RUMOUR RADAR | ${date}\n\n${lines.join("\n")}`;
   }
-  return post;
+  const clubs = shown.flatMap((i) => [i.to, i.from]);
+  return appendHashtags(post, clubs);
 }

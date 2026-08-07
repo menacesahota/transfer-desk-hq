@@ -11,7 +11,7 @@
  */
 
 import { scoreAllRumours, bar } from "./radar.js";
-import { moveLabel, stageLabel } from "./entities.js";
+import { moveLabel, stageLabel, appendHashtags } from "./entities.js";
 
 const MIN_DELTA = Number(process.env.RUMOURWATCH_DELTA || 12);
 const MIN_FIRST_LIKELIHOOD = Number(process.env.RUMOURWATCH_MIN_FIRST || 30);
@@ -76,5 +76,5 @@ export function buildRumourWatchPost(item) {
   if (post.length > 280) {
     post = `RUMOUR WATCH | ${title}\n\n${bar(item.likelihood)} ${item.likelihood}% (${trend})`;
   }
-  return post;
+  return appendHashtags(post, [item.to, item.from]);
 }

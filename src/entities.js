@@ -221,6 +221,66 @@ export function extractClubs(text) {
   return extractClubMatches(text).map((c) => c.name);
 }
 
+/** "Real Madrid" -> "RealMadrid"; strips diacritics and punctuation for clubs with no dedicated short alias. */
+function nameToHashtag(name) {
+  const clean = name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+  return clean ? `#${clean}` : null;
+}
+
+/**
+ * Club -> hashtag, e.g. Arsenal -> #AFC, Newcastle -> #NUFC. Prefers each
+ * club's existing "#alias" from CLUBS (the abbreviation its own fanbase
+ * actually uses) over an auto-generated one; falls back to the full name
+ * with spaces/diacritics stripped for clubs with no short alias on record
+ * (mostly non-English sides — Real Madrid -> #RealMadrid).
+ */
+const CLUB_HASHTAG = new Map(
+  CLUBS.map((c) => {
+    const shortAlias = c.aliases.find((a) => a.startsWith("#"));
+    return [c.name, shortAlias ? `#${shortAlias.slice(1).toUpperCase()}` : nameToHashtag(c.name)];
+  })
+);
+
+export function clubHashtag(name) {
+  if (!name) return null;
+  return CLUB_HASHTAG.get(name) || nameToHashtag(name);
+}
+
+/** Hashtags for a list of club names, deduped, in order of first appearance. */
+export function clubHashtags(names) {
+  const seen = new Set();
+  const tags = [];
+  for (const name of names || []) {
+    const tag = clubHashtag(name);
+    if (tag && !seen.has(tag)) {
+      seen.add(tag);
+      tags.push(tag);
+    }
+  }
+  return tags;
+}
+
+/**
+ * Append club hashtags to a finished post, dropping tags (never post
+ * content) if they don't fit within maxLen. Call this LAST, after any
+ * existing truncation logic has already fitted the core text.
+ */
+export function appendHashtags(post, clubNames, maxLen = 280) {
+  const tags = clubHashtags(clubNames);
+  for (let n = tags.length; n > 0; n--) {
+    const candidate = `${post}\n\n${tags.slice(0, n).join(" ")}`;
+    if (candidate.length <= maxLen) return candidate;
+  }
+  return post;
+}
+
 /** Cues that mark the club BEFORE the pattern end as a destination. */
 // "medical (at|with)" is included as a destination cue: a medical only ever
 // happens at the buying club, by definition — a real case ("Bruno Guimarães

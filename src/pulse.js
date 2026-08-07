@@ -6,7 +6,7 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { stageLabel, moveLabel, entryDirection, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
+import { stageLabel, moveLabel, entryDirection, entryPlayer, entryPlayerKey, entryRenewal, appendHashtags } from "./entities.js";
 
 /** Per-entry direction with safe fallback for entries logged before direction parsing. */
 function entryMove(e) {
@@ -68,14 +68,17 @@ export function buildPulsePost(pulse) {
   const counts = bits.length ? bits.join(", ") : "quiet window";
   const fees = feeTotal ? ` | ~£${Math.round(feeTotal)}m committed` : "";
 
-  const top = [...byStage.done, ...byStage.medical, ...byStage.agreement]
-    .slice(0, 3)
-    .map((e) => `• ${itemLine(e)}`);
+  const topEntries = [...byStage.done, ...byStage.medical, ...byStage.agreement].slice(0, 3);
+  const top = topEntries.map((e) => `• ${itemLine(e)}`);
 
   let post = `LIVE DESK | last ${hours}h\n\n${counts}${fees}`;
   if (top.length) post += `\n\n${top.join("\n")}`;
-  if (post.length > 280) post = `LIVE DESK | last ${hours}h\n\n${counts}${fees}`;
-  return post;
+  let clubs = topEntries.flatMap((e) => { const m = entryMove(e); return [m.to, m.from]; });
+  if (post.length > 280) {
+    post = `LIVE DESK | last ${hours}h\n\n${counts}${fees}`;
+    clubs = [];
+  }
+  return appendHashtags(post, clubs);
 }
 
 /* ------------------------- image card ------------------------- */

@@ -4,7 +4,7 @@
  * post a "Day N" timeline update, threaded onto the previous saga post.
  */
 
-import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal, appendHashtags } from "./entities.js";
 
 const SAGA_MIN_EVENTS = Number(process.env.SAGA_MIN_EVENTS || 2);
 const SAGA_MAX_AGE_DAYS = Number(process.env.SAGA_MAX_AGE_DAYS || 45);
@@ -103,7 +103,7 @@ export function buildSagaPost(saga) {
     post = `${header}\n\n…\n${lines.join("\n")}`;
   }
   if (post.length > 280) post = `${header}\n\n${lines[lines.length - 1]}`;
-  return post;
+  return appendHashtags(post, [saga.move?.to, saga.move?.from]);
 }
 
 /** One-line summary for the CLI listing. */

@@ -10,7 +10,7 @@
  * `e.player` is never trusted — older log entries can hold club-shaped names).
  */
 
-import { entryPlayer, entryPlayerKey, entryRenewal, extractClubs } from "./entities.js";
+import { entryPlayer, entryPlayerKey, entryRenewal, extractClubs, appendHashtags } from "./entities.js";
 
 const WATCH_DAYS = Number(process.env.CONTRACTWATCH_DAYS || 3);
 const MAX_ITEMS = Number(process.env.CONTRACTWATCH_MAX_ITEMS || 5);
@@ -144,6 +144,9 @@ export function buildContractWatchPost(items, now = new Date()) {
     post = render(rows, true);
   }
   if (post.length > 280) post = render(rows, false); // drop credits before rows
-  if (post.length > 280) post = render(rows.slice(0, 2), false);
-  return post;
+  if (post.length > 280) {
+    rows = rows.slice(0, 2);
+    post = render(rows, false);
+  }
+  return appendHashtags(post, rows.map((i) => i.club));
 }
