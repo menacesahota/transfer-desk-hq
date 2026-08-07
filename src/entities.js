@@ -169,7 +169,7 @@ const FROM_AFTER = /^(?:'|’)?s?\s*(?:defender|midfielder|striker|forward|winge
 const TO_AFTER = /^\s*(?:have|has)\s+(?:signed|brought\s+in|completed|wrapped\s+up|sealed|agreed\s+(?:a\s+)?(?:deal|terms)\s+to\s+sign|recruit|submitted|tabled|lodged|sent|bid|made\s+an?\s+(?:offer|bid)|opened\s+talks|approached|enquired|asked\s+about)/i;
 
 /** Cues right AFTER a club that mark it as the selling side. */
-const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejected|turned\s+down|knocked\s+back|let\s+.*\s+(?:go|leave)|sanctioned|green-?lit)/i;
+const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejected|turned\s+down|knocked\s+back|let\s+.*\s+(?:go|leave)|sanctioned|green-?lit)|^\s*(?:are|is)\s+(?:willing\s+to\s+sell|prepared\s+to\s+sell|ready\s+to\s+sell|considering\s+offers)|^\s*(?:are|is)?\s*open\s+to(?:\s+offers|\s+selling|\s+a\s+sale)?\b/i;
 
 /** Interest cues AFTER a club — the interested club is the destination. */
 const INTEREST_AFTER = /^\s*(?:are|is|have|has|remain)\s+(?:interested|keen|monitoring|tracking|keeping\s+tabs|eyeing|targeting|in\s+talks|pushing|leading\s+the\s+race|favourites)/i;
@@ -209,15 +209,28 @@ export function detectDirection(text) {
   let to = null;
   let from = null;
 
+  // Pass 1: explicit, low-ambiguity signals only ("from Newcastle", "sold
+  // to Arsenal", "have submitted a bid"). These always win regardless of
+  // where in the sentence they land.
   for (const m of matches) {
     const pre = raw.slice(Math.max(0, m.idx - 42), m.idx);
     const post = raw.slice(m.idx + m.len, m.idx + m.len + 60);
-
     if (!to && TO_BEFORE.test(pre)) to = m.name;
-    else if (!to && (TO_AFTER.test(post) || INTEREST_AFTER.test(post))) to = m.name;
-
+    else if (!to && TO_AFTER.test(post)) to = m.name;
     if (!from && FROM_BEFORE.test(pre)) from = m.name;
-    else if (!from && (FROM_AFTER.test(post) || SELL_AFTER.test(post))) from = m.name;
+    else if (!from && SELL_AFTER.test(post)) from = m.name;
+  }
+
+  // Pass 2: weaker heuristics only fill remaining gaps. FROM_AFTER in
+  // particular ("Arsenal captain Martin Odegaard says...") can misfire on a
+  // role word introducing an unrelated quoted person rather than the
+  // transfer target, so it must never override a slot pass 1 already
+  // settled, and must never claim a club already assigned to the other side.
+  for (const m of matches) {
+    if (to && from) break;
+    const post = raw.slice(m.idx + m.len, m.idx + m.len + 60);
+    if (!to && !from && INTEREST_AFTER.test(post) && m.name !== from) to = m.name;
+    if (!from && !to && FROM_AFTER.test(post) && m.name !== to) from = m.name;
   }
 
   // Two clubs, one side known -> the other is the opposite side
