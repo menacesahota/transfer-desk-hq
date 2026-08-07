@@ -287,19 +287,26 @@ export function appendHashtags(post, clubNames, maxLen = 280) {
 // completes his medical at Arsenal") was previously undetected entirely
 // (no TO/FROM cue matched "medical at CLUB"), leaving direction null and
 // falling back to a weaker heuristic that got it backwards.
-const TO_BEFORE = /(?:join(?:s|ing|ed)?|sign(?:s|ing|ed)?\s+for|mov(?:e|es|ed|ing)\s+to|switch(?:ing)?\s+to|heading\s+to|head(?:s|ed)?\s+to|loan(?:ed)?\s+(?:move\s+|switch\s+)?to|transfer(?:ring)?\s+to|sold\s+to|sale\s+to|poised\s+to\s+(?:move\s+to|join)|nearing\s+a\s+(?:switch|move)\s+to|on\s+his\s+way\s+to|medical(?:\s+\w+){0,2}\s+(?:at|with)|→)\s*(?:the\s+)?$/i;
+// "medical ahead of CLUB" ("Salah completes medical ahead of Trabzonspor
+// move") is at least as common as "medical at CLUB" — added alongside it.
+const TO_BEFORE = /(?:join(?:s|ing|ed)?|sign(?:s|ing|ed)?\s+for|mov(?:e|es|ed|ing)\s+to|switch(?:ing)?\s+to|heading\s+to|head(?:s|ed)?\s+to|loan(?:ed)?\s+(?:move\s+|switch\s+)?to|transfer(?:ring)?\s+to|sold\s+to|sale\s+to|poised\s+to\s+(?:move\s+to|join)|nearing\s+a\s+(?:switch|move)\s+to|on\s+his\s+way\s+to|medical(?:\s+\w+){0,2}\s+(?:at|with|ahead\s+of)|→)\s*(?:the\s+)?$/i;
 
 /** Cues that mark the club BEFORE the pattern end as the origin. */
 const FROM_BEFORE = /(?:from|leav(?:e|es|ing)|left|exit(?:s|ing)?(?:\s+from)?|depart(?:s|ing|ure)?(?:\s+from)?|away\s+from|out\s+of)\s*(?:the\s+)?$/i;
 
 /** Cues right AFTER a club that mark it as the origin (possessive / squad role). */
-const FROM_AFTER = /^(?:'|’)?s?\s*(?:defender|midfielder|striker|forward|winger|goalkeeper|keeper|full-?back|centre-?back|youngster|starlet|academy|captain|star|man|player|outcast)\b/i;
+// "CLUB exit" ("after Liverpool exit") — the reverse word order of the
+// "leaving/exiting CLUB" FROM_BEFORE cue.
+const FROM_AFTER = /^(?:'|’)?s?\s*(?:defender|midfielder|striker|forward|winger|goalkeeper|keeper|full-?back|centre-?back|youngster|starlet|academy|captain|star|man|player|outcast|exit\b)/i;
 
 /** Cues right AFTER a club that mark it as the acquiring side. */
 // "Arsenal medical" / "Arsenal's medical" (club immediately followed by
 // "medical", the reverse word order of the "medical at Arsenal" TO_BEFORE
 // cue) — same reasoning: a medical only happens at the buying club.
-const TO_AFTER = /^\s*(?:have|has)\s+(?:signed|brought\s+in|completed|wrapped\s+up|sealed|agreed\s+(?:a\s+)?(?:deal|terms)\s+to\s+sign|agreed\s+a\s+fee\s+(?:with|for)|recruit|submitted|tabled|lodged|sent|bid|made\s+an?\s+(?:offer|bid)|opened\s+talks|approached|enquired|asked\s+about)|^(?:'s|’s)?\s*medical\b/i;
+// "reached an agreement (in principle) with CLUB" ("Liverpool have reached
+// an agreement in principle with PSG for Bradley Barcola") — same shape as
+// the existing "agreed a fee with CLUB" cue, just a different common verb.
+const TO_AFTER = /^\s*(?:have|has)\s+(?:signed|brought\s+in|completed|wrapped\s+up|sealed|agreed\s+(?:a\s+)?(?:deal|terms)\s+to\s+sign|agreed\s+a\s+fee\s+(?:with|for)|reached\s+(?:an\s+)?agreement\s+(?:in\s+principle\s+)?with|recruit|submitted|tabled|lodged|sent|bid|made\s+an?\s+(?:offer|bid)|opened\s+talks|approached|enquired|asked\s+about)|^(?:'s|’s)?\s*medical\b/i;
 
 /** Cues right AFTER a club that mark it as the selling side. */
 const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejected|turned\s+down|knocked\s+back|let\s+.*\s+(?:go|leave)|sanctioned|green-?lit)|^\s*(?:are|is)\s+(?:willing\s+to\s+sell|prepared\s+to\s+sell|ready\s+to\s+sell|considering\s+offers)|^\s*(?:are|is)?\s*open\s+to(?:\s+offers|\s+selling|\s+a\s+sale)?\b/i;
@@ -515,6 +522,16 @@ function cleanForNames(text) {
 }
 
 /**
+ * Well-known single-name ("mononym") players almost always referred to by
+ * one word alone in transfer coverage (Rodri, not "Rodri Hernández") — the
+ * normal 2+ word candidate matching can never catch these, since a lone
+ * capitalised word is far too weak a signal to trust in general. Keep this
+ * curated and only add names you're genuinely confident about: a bad entry
+ * risks matching an unrelated capitalised word as a "player".
+ */
+const MONONYMS = new Set(["rodri"]);
+
+/**
  * Every plausible player name in the text (2–4 capitalised words, staff and
  * club names filtered out), each with its position in the cleaned text.
  * A tip naming two different transfer subjects — "James Trafford completes
@@ -558,7 +575,23 @@ export function extractPlayerCandidates(text) {
     const name = applyNickname(words.join(" ").replace(/[.,!?]+$/, ""));
     if (!candidates.some((c) => c.name === name)) candidates.push({ name, index: m.index });
   }
-  return candidates;
+
+  // Second pass: bare mononyms. Separate from the main loop since it
+  // matches single capitalised words, which would be far too weak a
+  // pattern to run unconditionally — only fires for the curated allowlist.
+  const singleRe = new RegExp(NAME_TOKEN, "gu");
+  for (const m of clean.matchAll(singleRe)) {
+    const word = m[0].replace(/[.,!?]+$/, "");
+    if (!MONONYMS.has(word.toLowerCase())) continue;
+    // A longer run already claimed this exact position ("Rodri Hernández"
+    // starts at the same index bare "Rodri" would) — don't double-count it.
+    if (candidates.some((c) => c.index === m.index)) continue;
+    if (ROLE_BEFORE.test(clean.slice(0, m.index))) continue;
+    if (ROLE_AFTER.test(clean.slice(m.index + m[0].length))) continue;
+    candidates.push({ name: applyNickname(word), index: m.index });
+  }
+
+  return candidates.sort((a, b) => a.index - b.index);
 }
 
 /** Best-effort single player name — first valid candidate found. */

@@ -9,7 +9,7 @@
  * It is presented as the desk's read, not a statistical claim.
  */
 
-import { stageRank, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal, appendHashtags } from "./entities.js";
+import { stageRank, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal, extractClubs, appendHashtags } from "./entities.js";
 
 const ACTIVE_DAYS = Number(process.env.RADAR_ACTIVE_DAYS || 14);
 const MAX_ITEMS = Number(process.env.RADAR_MAX_ITEMS || 5);
@@ -93,14 +93,19 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
 
     // Double-check before this reaches a post: at agreement/medical stage,
     // moveLabel() falls back to "PLAYER leaving CLUB" whenever only one
-    // side of the move is resolved — and that fallback has repeatedly been
-    // either backwards or just misleading (Ashley Phillips, Bruno
-    // Guimarães twice). Rather than publish a confident-sounding advanced-
-    // stage claim built on an incomplete direction read, hold the story
-    // back until a later tip (or more of the log) resolves both sides.
-    // Lower stages (interest/talks/bid) already read as tentative enough
-    // that an incomplete direction isn't misleading in the same way.
-    if (stageRank(topStage) >= stageRank("agreement") && !(move.to && move.from)) continue;
+    // side of the move is resolved — a real risk ONLY when 2+ clubs are in
+    // play, since that's when the fallback might be naming the wrong one
+    // (Ashley Phillips, Bruno Guimarães twice — both two-club mix-ups).
+    // When just ONE club has ever been mentioned for this story there's no
+    // ambiguity to get backwards, so holding it too would just be silently
+    // suppressing real, well-sourced news (e.g. "Barcelona agree personal
+    // terms with Rodri" naming only the pursuing club, which every outlet
+    // does for the many stories where the player's origin club goes
+    // unstated because it's common knowledge).
+    const clubsInPlay = new Set(
+      events.flatMap((e) => (e.clubs?.length ? e.clubs : extractClubs(e.original || "")))
+    );
+    if (stageRank(topStage) >= stageRank("agreement") && clubsInPlay.size >= 2 && !(move.to && move.from)) continue;
 
     items.push({
       playerKey: key,
