@@ -90,6 +90,18 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
     score = Math.round(Math.max(5, Math.min(92, score)));
 
     const move = resolveMove(events);
+
+    // Double-check before this reaches a post: at agreement/medical stage,
+    // moveLabel() falls back to "PLAYER leaving CLUB" whenever only one
+    // side of the move is resolved — and that fallback has repeatedly been
+    // either backwards or just misleading (Ashley Phillips, Bruno
+    // Guimarães twice). Rather than publish a confident-sounding advanced-
+    // stage claim built on an incomplete direction read, hold the story
+    // back until a later tip (or more of the log) resolves both sides.
+    // Lower stages (interest/talks/bid) already read as tentative enough
+    // that an incomplete direction isn't misleading in the same way.
+    if (stageRank(topStage) >= stageRank("agreement") && !(move.to && move.from)) continue;
+
     items.push({
       playerKey: key,
       player: events
