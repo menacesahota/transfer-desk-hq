@@ -135,6 +135,39 @@ export const CLUBS = [
   { name: "Wrexham", aliases: ["wrexham"] },
   { name: "Plymouth", aliases: ["plymouth argyle", "plymouth"] },
   { name: "Oxford United", aliases: ["oxford united"] },
+  // Saudi Pro League / Qatar Stars League / UAE — increasingly common
+  // transfer destinations. Missing these caused a real bug: "Al Gharafa"
+  // (unrecognised as a club) got parsed as the PLAYER name instead of the
+  // actual player (Ismaël Bennacer), since it fit the same 2-capitalised-
+  // word shape and nothing flagged it as club-like.
+  { name: "Al Hilal", aliases: ["al hilal", "al-hilal"] },
+  { name: "Al Nassr", aliases: ["al nassr", "al-nassr"] },
+  { name: "Al Ittihad", aliases: ["al ittihad", "al-ittihad"] },
+  { name: "Al Ahli", aliases: ["al ahli", "al-ahli"] },
+  { name: "Al Ettifaq", aliases: ["al ettifaq", "al-ettifaq"] },
+  { name: "Al Taawoun", aliases: ["al taawoun", "al-taawoun"] },
+  { name: "Al Fateh", aliases: ["al fateh", "al-fateh"] },
+  { name: "Al Shabab", aliases: ["al shabab", "al-shabab"] },
+  { name: "Al Riyadh", aliases: ["al riyadh", "al-riyadh"] },
+  { name: "Al Fayha", aliases: ["al fayha", "al-fayha"] },
+  { name: "Al Khaleej", aliases: ["al khaleej", "al-khaleej"] },
+  { name: "Al Qadsiah", aliases: ["al qadsiah", "al-qadsiah"] },
+  { name: "Al Kholood", aliases: ["al kholood", "al-kholood"] },
+  { name: "Al Okhdood", aliases: ["al okhdood", "al-okhdood"] },
+  { name: "Al Orobah", aliases: ["al orobah", "al-orobah"] },
+  { name: "Damac", aliases: ["damac"] },
+  { name: "Neom SC", aliases: ["neom sc", "neom"] },
+  { name: "Al Sadd", aliases: ["al sadd", "al-sadd"] },
+  { name: "Al Duhail", aliases: ["al duhail", "al-duhail"] },
+  { name: "Al Rayyan", aliases: ["al rayyan", "al-rayyan"] },
+  { name: "Al Arabi", aliases: ["al arabi", "al-arabi"] },
+  { name: "Al Gharafa", aliases: ["al gharafa", "al-gharafa"] },
+  { name: "Al Wakrah", aliases: ["al wakrah", "al-wakrah"] },
+  { name: "Al Ain", aliases: ["al ain", "al-ain"] },
+  { name: "Al Wahda", aliases: ["al wahda", "al-wahda"] },
+  { name: "Al Wasl", aliases: ["al wasl", "al-wasl"] },
+  { name: "Al Jazira", aliases: ["al jazira", "al-jazira"] },
+  { name: "Sharjah", aliases: ["sharjah"] },
 ];
 
 /**
@@ -561,6 +594,13 @@ export function extractPlayerCandidates(text) {
     const lowerWords = words.map((w) => w.toLowerCase().replace(/[.,!?]+$/, ""));
     if (lowerWords.some((w) => NOT_NAME_WORDS.has(w))) continue;
     if (lowerWords.every(isClubWord)) continue;
+    // "Al Gharafa" bug: a space-separated "Al X" run is almost always a
+    // club (Arabic-league naming convention — Al Hilal, Al Nassr, Al
+    // Gharafa, ...), even for clubs not in our CLUBS list yet. Real player
+    // surnames with this prefix are written hyphenated as ONE token
+    // ("Al-Dawsari"), which this NAME_TOKEN pattern already keeps intact —
+    // so this only catches the two-word club form, never a real surname.
+    if (words.length === 2 && lowerWords[0] === "al") continue;
     // Drop leading club words ("Tottenham's Ashley Phillips" → "Ashley Phillips")
     while (lowerWords.length > 1 && isClubWord(lowerWords[0])) {
       lowerWords.shift();
