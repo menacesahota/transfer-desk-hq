@@ -23,6 +23,7 @@ import {
 } from "./contractwatch.js";
 import { SMOKETEST_KEY, smokeTestEnabled, buildSmokeTestPost } from "./smoketest.js";
 import { postTweet, saveDraft } from "./post.js";
+import { verifyMove, hasSerperKey } from "./verify.js";
 
 const MAX_EXTRAS_PER_CYCLE = Number(process.env.MAX_EXTRAS_PER_CYCLE || 2);
 const RADAR_HOUR = Number(process.env.RADAR_HOUR ?? 9); // UTC hour; -1 = off
@@ -61,6 +62,25 @@ export function describeError(err) {
  * rate limit, network blip) must not take down the rest of the cycle or
  * skip saveState for everything else that already succeeded.
  */
+/**
+ * Live fact-check gate for single-claim posts (consensus, saga, rumour
+ * watch) — the ones that assert one specific player+club story, where a
+ * wrong call is most visible. Internal consistency checks (direction fully
+ * resolved, staff/nickname handling, etc.) catch the parser being wrong
+ * about its OWN data; this catches the parser being coherent but wrong
+ * about what's actually true. No-op (always passes) unless SERPER_API_KEY
+ * is configured — see verify.js.
+ */
+async function factCheck({ kind, player, to, from, stage }) {
+  const result = await verifyMove({ player, to, from, stage });
+  if (!result.verified) {
+    console.log(`[${kind}] HELD (not posted) — ${player}: ${result.reason} (query: "${result.query}")`);
+  } else if (hasSerperKey()) {
+    console.log(`[${kind}] fact-check ok — ${player}: ${result.reason}`);
+  }
+  return result.verified;
+}
+
 async function publishExtra({ text, kind, publish, replyTo, localImage }) {
   try {
     if (publish) {
@@ -111,6 +131,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       if (emitted >= MAX_EXTRAS_PER_CYCLE) break;
       const key = clusterPostKey(cluster);
       if (hasPosted(state, key) || !cluster.player) continue;
+      if (!(await factCheck({ kind: "consensus", player: cluster.player, to: cluster.move?.to, from: cluster.move?.from, stage: cluster.stage }))) continue;
       const text = buildConsensusPost(cluster);
       console.log(`\n[consensus] ${cluster.player} (${cluster.sources} sources)\n${text}\n`);
       const result = await publishExtra({ text, kind: "consensus", publish });
@@ -123,6 +144,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       if (emitted >= MAX_EXTRAS_PER_CYCLE) break;
       const key = sagaPostKey(saga);
       if (hasPosted(state, key) || !saga.player) continue;
+      if (!(await factCheck({ kind: "saga", player: saga.player, to: saga.move?.to, from: saga.move?.from, stage: saga.stage }))) continue;
       const text = buildSagaPost(saga);
       console.log(`\n[saga] ${saga.player} day ${saga.day}\n${text}\n`);
       const result = await publishExtra({
@@ -141,6 +163,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
     // 3) Rumour Watch — reactive single-story odds updates, independent of
     // the shared consensus/saga cap (self-limited via RUMOURWATCH_MAX_PER_CYCLE)
     for (const item of computeRumourUpdates(log, state.rumourWatch)) {
+      if (!(await factCheck({ kind: "rumourwatch", player: item.player, to: item.to, from: item.from, stage: item.stage }))) continue;
       const text = buildRumourWatchPost(item);
       console.log(`\n[rumourwatch] ${item.player} ${item.previous ?? "-"}% -> ${item.likelihood}%\n${text}\n`);
       const result = await publishExtra({ text, kind: "rumourwatch", publish });

@@ -34,6 +34,7 @@ npm run smoketest # preview/force the one-time "posting works" pipeline check (a
 - src/entities.js — player/club/stage extraction shared by desk features
 - src/store.js — persistent tip log (data/tiplog.json) + feature state
 - src/consensus.js, saga.js, scorecard.js, pulse.js, radar.js, rumourwatch.js, contractwatch.js — desk features
+- src/verify.js — optional live web-search fact-check (Serper.dev) gating consensus/saga/rumour watch posts before they go out; no-op without SERPER_API_KEY
 - src/smoketest.js — one-time "posting works" pipeline check, fires before real desk content
 - src/extras.js — orchestrates feature posts inside the watch cycle
 - drafts/ — generated drafts
