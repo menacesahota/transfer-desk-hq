@@ -23,7 +23,7 @@ import {
 } from "./contractwatch.js";
 import { SMOKETEST_KEY, smokeTestEnabled, buildSmokeTestPost } from "./smoketest.js";
 import { postTweet, saveDraft } from "./post.js";
-import { verifyMove, hasSerperKey } from "./verify.js";
+import { verifyStory, hasSerperKey } from "./verify.js";
 
 const MAX_EXTRAS_PER_CYCLE = Number(process.env.MAX_EXTRAS_PER_CYCLE || 2);
 const RADAR_HOUR = Number(process.env.RADAR_HOUR ?? 9); // UTC hour; -1 = off
@@ -63,22 +63,35 @@ export function describeError(err) {
  * skip saveState for everything else that already succeeded.
  */
 /**
- * Live fact-check gate for single-claim posts (consensus, saga, rumour
- * watch) — the ones that assert one specific player+club story, where a
- * wrong call is most visible. Internal consistency checks (direction fully
- * resolved, staff/nickname handling, etc.) catch the parser being wrong
- * about its OWN data; this catches the parser being coherent but wrong
- * about what's actually true. No-op (always passes) unless SERPER_API_KEY
- * is configured — see verify.js.
+ * Live fact-check gate — every post asserting a specific player+club story
+ * goes through this before publishing. Two independent checks (see
+ * verify.js): is this actually a real player (always on, free, catches
+ * category errors like a club name ending up in the player slot), and does
+ * recent web news corroborate the move without saying it fell through
+ * (opt-in, needs SERPER_API_KEY). Internal consistency checks elsewhere
+ * (direction fully resolved, staff/nickname handling, etc.) catch the
+ * parser being wrong about its OWN data; this catches it being internally
+ * coherent but wrong about what's actually true.
  */
 async function factCheck({ kind, player, to, from, stage }) {
-  const result = await verifyMove({ player, to, from, stage });
+  const result = await verifyStory({ player, to, from, stage });
   if (!result.verified) {
-    console.log(`[${kind}] HELD (not posted) — ${player}: ${result.reason} (query: "${result.query}")`);
+    console.log(`[${kind}] HELD (not posted) — ${player}: ${result.reason}`);
   } else if (hasSerperKey()) {
     console.log(`[${kind}] fact-check ok — ${player}: ${result.reason}`);
   }
   return result.verified;
+}
+
+/** Filter a list of {player, to?, from?, club?, stage} items down to only the ones that pass factCheck. */
+async function factCheckAll(kind, items) {
+  const kept = [];
+  for (const item of items) {
+    if (await factCheck({ kind, player: item.player, to: item.to ?? item.club, from: item.from, stage: item.stage })) {
+      kept.push(item);
+    }
+  }
+  return kept;
 }
 
 async function publishExtra({ text, kind, publish, replyTo, localImage }) {
@@ -194,7 +207,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
     if (RADAR_HOUR >= 0 && new Date().getUTCHours() >= RADAR_HOUR) {
       const key = radarPostKey();
       if (!hasPosted(state, key)) {
-        const items = computeOdds(log);
+        const items = await factCheckAll("radar", computeOdds(log));
         if (items.length >= RADAR_MIN_ITEMS) {
           const text = buildRadarPost(items);
           console.log(`\n[radar]\n${text}\n`);
@@ -208,7 +221,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
     if (CONTRACTWATCH_HOUR >= 0 && new Date().getUTCHours() >= CONTRACTWATCH_HOUR) {
       const key = contractWatchPostKey();
       if (!hasPosted(state, key)) {
-        const items = computeContractWatch(log);
+        const items = await factCheckAll("contractwatch", computeContractWatch(log));
         if (items.length >= CONTRACTWATCH_MIN_ITEMS) {
           const text = buildContractWatchPost(items);
           console.log(`\n[contractwatch]\n${text}\n`);

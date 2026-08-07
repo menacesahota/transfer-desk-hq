@@ -1,27 +1,73 @@
 /**
- * Live web-search fact-check, run right before an advanced/high-stakes post
- * goes out. Catches the class of error internal consistency checks can't:
- * the parser being confident and *internally* coherent but simply wrong
- * about what's actually happening in the world (e.g. reporting a deal that
- * was later denied, or attributing a real story to the wrong player/club
- * combination that nonetheless "reads fine" on its own).
+ * Two independent live checks, run right before an advanced/high-stakes
+ * post goes out — each catches a different class of error the entity
+ * parser's own internal-consistency checks can't:
  *
- * Fully opt-in: with no SERPER_API_KEY set, verifyMove() always returns
- * verified so the desk behaves exactly as before. Get a key from
- * https://serper.dev (free tier covers this comfortably — a handful of
- * searches per day, only right before a post, not every watch cycle).
+ *   - isKnownPlayer(): does a real professional footballer by this name
+ *     even exist? Catches category errors — the parser extracting a club
+ *     name, competition, or other non-person string into the player slot
+ *     (real case: "Al Gharafa leaving AC Milan" — Al Gharafa is a Qatari
+ *     club, not a player; the real story was Ismaël Bennacer leaving AC
+ *     Milan to join them). Free, no signup, always on.
+ *
+ *   - verifyMove(): does recent web news actually corroborate this
+ *     player+club combination, and does it NOT say the move fell through?
+ *     Catches the parser being internally coherent but wrong about the
+ *     real world (real case: "Yan Diomande -> PSG" — PSG had already
+ *     pulled out days earlier, he signed for Real Madrid instead). Opt-in,
+ *     needs a free Serper.dev key.
+ *
+ * Both fail OPEN on network/API errors (a flaky third party can't silently
+ * stop the desk from posting real news) and fail CLOSED only when the
+ * check genuinely completed and came back negative.
  */
 
 const SERPER_URL = "https://google.serper.dev/news";
+const SPORTSDB_URL = "https://www.thesportsdb.com/api/v1/json/3/searchplayers.php";
 const TIMEOUT_MS = Number(process.env.VERIFY_TIMEOUT_MS || 8000);
 const CACHE_TTL_MS = 6 * 3600_000; // re-check a story periodically, not every cycle
 
 // In-memory only — watch() is a long-running process, so this still saves
 // repeat lookups within a session without needing to touch disk.
 const cache = new Map();
+const playerCache = new Map();
 
 export function hasSerperKey() {
   return Boolean(process.env.SERPER_API_KEY);
+}
+
+/**
+ * Does a real professional footballer by this name exist, per TheSportsDB
+ * (free, public, no API key required)? Names with 1-2 words only — a
+ * mononym allowlist entry (e.g. "Rodri") is looked up as-is.
+ */
+export async function isKnownPlayer(name) {
+  if (!name) return { known: false, reason: "no player name" };
+  const cacheKey = name.toLowerCase();
+  const cached = playerCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.result;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let result;
+  try {
+    const url = `${SPORTSDB_URL}?p=${encodeURIComponent(name.trim().replace(/\s+/g, "_"))}`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`TheSportsDB HTTP ${res.status}`);
+    const data = await res.json();
+    const players = Array.isArray(data.player) ? data.player : [];
+    const soccerPlayers = players.filter((p) => !p.strSport || /soccer|football/i.test(p.strSport));
+    result = soccerPlayers.length
+      ? { known: true, reason: `found (${soccerPlayers[0].strTeam || "no club listed"})` }
+      : { known: false, reason: "no matching player found in player database" };
+  } catch (err) {
+    // Fail open — a lookup timeout/outage isn't evidence the player is fake.
+    result = { known: true, reason: `lookup failed, not held on this alone (${err.message})` };
+  } finally {
+    clearTimeout(timer);
+  }
+  playerCache.set(cacheKey, { result, at: Date.now() });
+  return result;
 }
 
 function buildQuery({ player, to, from }) {
@@ -128,4 +174,22 @@ export async function verifyMove({ player, to, from, stage }) {
 
   cache.set(cacheKey, { result, at: Date.now() });
   return result;
+}
+
+/**
+ * Run both checks and combine into one pass/fail — this is what callers
+ * should use. isKnownPlayer runs first since it's free and catches
+ * category errors (wrong thing extracted as a player) that verifyMove's
+ * keyword search can't: a plausible-sounding but wrong entity like a club
+ * name will often still turn up genuine matching news results (the real
+ * story just has it in the wrong slot), so isKnownPlayer needs to be the
+ * one to catch that specific failure mode.
+ */
+export async function verifyStory({ player, to, from, stage }) {
+  const identity = await isKnownPlayer(player);
+  if (!identity.known) {
+    return { verified: false, reason: `not a recognised player — ${identity.reason}`, stage: "identity" };
+  }
+  const move = await verifyMove({ player, to, from, stage });
+  return { verified: move.verified, reason: move.reason, stage: "move", query: move.query, checked: move.checked };
 }
