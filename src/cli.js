@@ -3,7 +3,7 @@ import { fetchNews } from "./news.js";
 import { hasXCredentials, hasBearer, getUserClient } from "./x-client.js";
 import { ensureDirs, postTweet } from "./post.js";
 import { logCycleTips, runExtras, emitPulse, describeError } from "./extras.js";
-import { loadLog, loadState, saveState, markPosted } from "./store.js";
+import { loadLog, loadState, saveState, markPosted, loadXCursors, saveXCursors } from "./store.js";
 import { findClusters, buildConsensusPost } from "./consensus.js";
 import { buildSagas, sagaSummary, buildSagaPost } from "./saga.js";
 import { computeScores, buildScorecardPost } from "./scorecard.js";
@@ -81,7 +81,12 @@ async function news() {
 async function runCycle({ publish, cycleCount = 0 }) {
   await ensureDirs();
   const perSource = Number(process.env.POSTS_PER_SOURCE || 5);
-  const { channel, tips, errors } = await fetchNews({ perSource, breakingOnly: true });
+  // Cursors cut X API spend: cached user ids skip a lookup per source per
+  // cycle, and since_id means quiet accounts cost a near-empty response
+  // instead of re-pulling the same handful of tweets every 10 minutes.
+  const cursors = await loadXCursors();
+  const { channel, tips, errors } = await fetchNews({ perSource, breakingOnly: true, cursors });
+  await saveXCursors(cursors);
 
   console.log(`Channel: ${channel}`);
   if (errors?.length) {

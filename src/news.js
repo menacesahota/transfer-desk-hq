@@ -18,23 +18,41 @@ const parser = new Parser({
 
 /**
  * Pull recent posts from breaker accounts via X API (with images when present).
+ *
+ * Two API-spend reductions, both opt-in via `cursors` (mutated in place —
+ * caller persists it after the call):
+ *   - userIds cache skips the userByUsername lookup once a handle's id is
+ *     known (ids don't change), cutting API calls per source in half.
+ *   - since_id means userTimeline only returns tweets newer than the last
+ *     one we already logged, instead of re-pulling the same ~5 recent
+ *     tweets from all 29 breakers on every single 10-minute cycle.
+ * Without `cursors` (e.g. the one-off `npm run news` preview) this falls
+ * back to the original always-fresh, always-full-lookup behaviour.
  */
-export async function fetchFromX({ perSource = 5, breakingOnly = true } = {}) {
+export async function fetchFromX({ perSource = 5, breakingOnly = true, cursors = null } = {}) {
   if (!hasXCredentials() && !hasBearer()) {
     throw new Error("X credentials not set");
   }
 
   const client = getAppClient().readOnly;
   const tips = [];
+  const userIds = cursors?.userIds || {};
+  const sinceIds = cursors?.sinceIds || {};
 
   for (const source of BREAKERS) {
+    const key = source.handle.toLowerCase();
     try {
-      const user = await client.v2.userByUsername(source.handle, {
-        "user.fields": ["id", "name", "username"],
-      });
-      if (!user.data?.id) continue;
+      let userId = userIds[key];
+      if (!userId) {
+        const user = await client.v2.userByUsername(source.handle, {
+          "user.fields": ["id", "name", "username"],
+        });
+        if (!user.data?.id) continue;
+        userId = user.data.id;
+        if (cursors) userIds[key] = userId;
+      }
 
-      const timeline = await client.v2.userTimeline(user.data.id, {
+      const timelineParams = {
         max_results: Math.min(Math.max(perSource, 5), 100),
         exclude: ["retweets", "replies"],
         expansions: ["attachments.media_keys"],
@@ -48,14 +66,20 @@ export async function fetchFromX({ perSource = 5, breakingOnly = true } = {}) {
           "conversation_id",
         ],
         "media.fields": ["url", "preview_image_url", "type", "width", "height", "alt_text"],
-      });
+      };
+      if (sinceIds[key]) timelineParams.since_id = sinceIds[key];
+
+      const timeline = await client.v2.userTimeline(userId, timelineParams);
 
       const mediaByKey = new Map();
       for (const m of timeline.includes?.media || []) {
         if (m.media_key) mediaByKey.set(m.media_key, m);
       }
 
+      let newestId = sinceIds[key] || null;
       for (const tweet of timeline.tweets || []) {
+        if (!newestId || BigInt(tweet.id) > BigInt(newestId)) newestId = tweet.id;
+
         // Belt-and-braces: API exclude + local reply checks
         if (isReplyTweet(tweet)) continue;
         if (breakingOnly && !isNewsworthyTip(tweet.text)) continue;
@@ -84,7 +108,12 @@ export async function fetchFromX({ perSource = 5, breakingOnly = true } = {}) {
           }),
         });
       }
+      if (cursors && newestId) sinceIds[key] = newestId;
     } catch (err) {
+      // A cached user id that starts erroring (renamed/suspended handle) —
+      // drop it so the next cycle re-resolves instead of failing forever.
+      const status = err?.data?.status || err?.code;
+      if (cursors && (status === 404 || status === 400)) delete userIds[key];
       tips.push({
         id: `error:${source.handle}`,
         source: "error",
@@ -212,8 +241,15 @@ export async function fetchNews(options = {}) {
     try {
       const fromX = await fetchFromX(options);
       const usable = fromX.filter((t) => t.source === "x");
-      if (usable.length) return { channel: "x", tips: usable, errors: fromX.filter((t) => t.source === "error") };
       const errors = fromX.filter((t) => t.source === "error");
+      if (usable.length) return { channel: "x", tips: usable, errors };
+      // With since_id cursors active, a quiet cycle can legitimately return
+      // zero new X tips without the channel being down — only fall back to
+      // RSS when X genuinely failed for every source, not just when
+      // there's nothing new since the last check.
+      if (options.cursors && errors.length < BREAKERS.length) {
+        return { channel: "x", tips: usable, errors };
+      }
       const rss = await fetchFromRss(options);
       return { channel: "rss-fallback", tips: rss, errors };
     } catch (err) {

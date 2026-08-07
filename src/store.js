@@ -11,6 +11,7 @@ const STORAGE_DIR = process.env.TRANSFER_DESK_STORAGE || ".";
 const DATA_DIR = path.resolve(STORAGE_DIR, "data");
 const LOG_PATH = path.join(DATA_DIR, "tiplog.json");
 const STATE_PATH = path.join(DATA_DIR, "feature-state.json");
+const CURSORS_PATH = path.join(DATA_DIR, "x-cursors.json");
 
 const LOG_MAX_ENTRIES = 5000;
 const LOG_MAX_AGE_DAYS = 120;
@@ -108,6 +109,29 @@ export function markPosted(state, key) {
   if (keys.length > 3000) {
     for (const k of keys.slice(0, keys.length - 3000)) delete state.postedKeys[k];
   }
+}
+
+/**
+ * X API call-saving cursors, kept across watch cycles:
+ *   - userIds: handle (lowercase) -> resolved numeric user id, so we stop
+ *     spending a userByUsername lookup on every single cycle for accounts
+ *     whose id essentially never changes.
+ *   - sinceIds: handle (lowercase) -> newest tweet id we've already logged,
+ *     passed as `since_id` so userTimeline only returns genuinely new
+ *     tweets instead of re-pulling the same recent posts every 10 minutes.
+ * Shared only by the automated watch/draft/post cycle — manual `npm run
+ * news` previews intentionally don't touch this, so a preview run can never
+ * advance since_id and cause the real loop to miss a tip it never logged.
+ */
+export async function loadXCursors() {
+  const c = await readJson(CURSORS_PATH, {});
+  c.userIds ||= {};
+  c.sinceIds ||= {};
+  return c;
+}
+
+export async function saveXCursors(cursors) {
+  await writeJson(CURSORS_PATH, cursors);
 }
 
 /** ISO week id like "2026-W32" for weekly scorecards. */
