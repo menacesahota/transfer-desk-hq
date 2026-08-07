@@ -364,6 +364,21 @@ const NOT_NAME_WORDS = new Set([
 /** Non-player roles: a name right after one of these is staff, not a player. */
 const ROLE_BEFORE = /(?:chairman|chairwoman|chief executive|ceo|president|owner|manager|head coach|coach|boss|sporting director|director|agent|journalist|reporter|scout)\s*$/i;
 
+/**
+ * Staff/executive hire announcements ("Ben Latty rejoins Liverpool as
+ * commercial director") read a lot like transfer news to the filter —
+ * appointed/joins/rejoins are common to both — but the ROLE word sits
+ * AFTER the name here, not before it, so ROLE_BEFORE alone misses it.
+ * A plain character-count window (not clause-scoped) is used deliberately:
+ * a comma-separated appositive ("...rejoins Liverpool, taking up the
+ * commercial director role") describes the SAME person across what
+ * cleanForNames() treats as a clause break, so stopping at the ¦ marker
+ * cut this off too early. Missing a staff mention is worse here than the
+ * rare case of a distant, unrelated role word coincidentally following a
+ * real player's name.
+ */
+const ROLE_AFTER = /^[^\n]{0,70}\b(?:commercial director|chief executive(?:\s+officer)?|\bceo\b|chairman|chairwoman|managing director|technical director|sporting director|director of football|head of recruitment|academy director|chief commercial officer|\bcco\b|chief financial officer|\bcfo\b|chief operating officer|\bcoo\b|general manager|club president|vice[- ]president|board member|non-executive director)\b/i;
+
 const CLUB_WORDS = new Set(
   CLUBS.flatMap((c) => [
     ...c.name.toLowerCase().split(/\s+/),
@@ -453,6 +468,10 @@ export function extractPlayerCandidates(text) {
   for (const m of clean.matchAll(runRe)) {
     // Skip staff names: "Crystal Palace chairman Steve Parish", "boss Mikel Arteta"
     if (ROLE_BEFORE.test(clean.slice(0, m.index))) continue;
+    // Skip staff hire announcements where the role comes AFTER the name:
+    // "Ben Latty rejoins Liverpool as commercial director" — reads like a
+    // transfer (appointed/joins/rejoins) but isn't a player move at all.
+    if (ROLE_AFTER.test(clean.slice(m.index + m[0].length))) continue;
     const words = m[0].split(/\s+/);
     const lowerWords = words.map((w) => w.toLowerCase().replace(/[.,!?]+$/, ""));
     if (lowerWords.some((w) => NOT_NAME_WORDS.has(w))) continue;
