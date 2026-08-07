@@ -61,6 +61,55 @@ export const CLUBS = [
   { name: "Celtic", aliases: ["celtic"] },
   { name: "Rangers", aliases: ["rangers"] },
   { name: "Olympiacos", aliases: ["olympiacos", "olympiakós"] },
+  // More Serie A — mid-table clubs still active in the transfer market
+  { name: "Como", aliases: ["como 1907", "como"] },
+  { name: "Fiorentina", aliases: ["fiorentina"] },
+  { name: "Bologna", aliases: ["bologna"] },
+  { name: "Torino", aliases: ["torino"] },
+  { name: "Udinese", aliases: ["udinese"] },
+  { name: "Genoa", aliases: ["genoa"] },
+  { name: "Cagliari", aliases: ["cagliari"] },
+  { name: "Parma", aliases: ["parma"] },
+  { name: "Hellas Verona", aliases: ["hellas verona", "verona"] },
+  { name: "Lecce", aliases: ["lecce"] },
+  { name: "Sassuolo", aliases: ["sassuolo"] },
+  { name: "Cremonese", aliases: ["cremonese"] },
+  { name: "Pisa", aliases: ["pisa"] },
+  // More La Liga
+  { name: "Real Sociedad", aliases: ["real sociedad"] },
+  { name: "Athletic Bilbao", aliases: ["athletic bilbao", "athletic club"] },
+  { name: "Real Betis", aliases: ["real betis", "betis"] },
+  { name: "Girona", aliases: ["girona"] },
+  { name: "Celta Vigo", aliases: ["celta vigo", "celta"] },
+  { name: "Rayo Vallecano", aliases: ["rayo vallecano", "rayo"] },
+  { name: "Osasuna", aliases: ["osasuna"] },
+  { name: "Getafe", aliases: ["getafe"] },
+  { name: "Alaves", aliases: ["alavés", "alaves"] },
+  { name: "Mallorca", aliases: ["mallorca"] },
+  { name: "Las Palmas", aliases: ["las palmas"] },
+  // More Bundesliga
+  { name: "Eintracht Frankfurt", aliases: ["eintracht frankfurt", "frankfurt"] },
+  { name: "VfB Stuttgart", aliases: ["vfb stuttgart", "stuttgart"] },
+  { name: "Borussia Monchengladbach", aliases: ["borussia mönchengladbach", "monchengladbach", "gladbach"] },
+  { name: "Wolfsburg", aliases: ["wolfsburg"] },
+  { name: "Freiburg", aliases: ["freiburg"] },
+  { name: "Union Berlin", aliases: ["union berlin"] },
+  { name: "Mainz", aliases: ["mainz"] },
+  { name: "Hoffenheim", aliases: ["hoffenheim"] },
+  { name: "Werder Bremen", aliases: ["werder bremen"] },
+  // More Ligue 1
+  { name: "Lille", aliases: ["lille"] },
+  { name: "Nice", aliases: ["ogc nice"] }, // bare "nice" is far too common a word to match safely
+  { name: "Rennes", aliases: ["rennes"] },
+  { name: "Lens", aliases: ["rc lens"] }, // bare "lens" collides with contact/camera lens
+  { name: "Strasbourg", aliases: ["strasbourg"] },
+  { name: "Toulouse", aliases: ["toulouse"] },
+  // Netherlands / Portugal / Turkey
+  { name: "PSV", aliases: ["psv eindhoven", "psv"] },
+  { name: "Feyenoord", aliases: ["feyenoord"] },
+  { name: "AZ Alkmaar", aliases: ["az alkmaar"] },
+  { name: "Braga", aliases: ["sporting braga", "braga"] },
+  { name: "Trabzonspor", aliases: ["trabzonspor"] },
   // Championship / EFL — frequent loan and sale destinations
   { name: "Middlesbrough", aliases: ["middlesbrough", "#boro"] },
   { name: "Norwich", aliases: ["norwich city", "norwich"] },
@@ -166,7 +215,7 @@ const FROM_BEFORE = /(?:from|leav(?:e|es|ing)|left|exit(?:s|ing)?(?:\s+from)?|de
 const FROM_AFTER = /^(?:'|’)?s?\s*(?:defender|midfielder|striker|forward|winger|goalkeeper|keeper|full-?back|centre-?back|youngster|starlet|academy|captain|star|man|player|outcast)\b/i;
 
 /** Cues right AFTER a club that mark it as the acquiring side. */
-const TO_AFTER = /^\s*(?:have|has)\s+(?:signed|brought\s+in|completed|wrapped\s+up|sealed|agreed\s+(?:a\s+)?(?:deal|terms)\s+to\s+sign|recruit|submitted|tabled|lodged|sent|bid|made\s+an?\s+(?:offer|bid)|opened\s+talks|approached|enquired|asked\s+about)/i;
+const TO_AFTER = /^\s*(?:have|has)\s+(?:signed|brought\s+in|completed|wrapped\s+up|sealed|agreed\s+(?:a\s+)?(?:deal|terms)\s+to\s+sign|agreed\s+a\s+fee\s+(?:with|for)|recruit|submitted|tabled|lodged|sent|bid|made\s+an?\s+(?:offer|bid)|opened\s+talks|approached|enquired|asked\s+about)/i;
 
 /** Cues right AFTER a club that mark it as the selling side. */
 const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejected|turned\s+down|knocked\s+back|let\s+.*\s+(?:go|leave)|sanctioned|green-?lit)|^\s*(?:are|is)\s+(?:willing\s+to\s+sell|prepared\s+to\s+sell|ready\s+to\s+sell|considering\s+offers)|^\s*(?:are|is)?\s*open\s+to(?:\s+offers|\s+selling|\s+a\s+sale)?\b/i;
