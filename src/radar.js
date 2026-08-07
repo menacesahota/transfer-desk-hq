@@ -14,12 +14,18 @@ import { stageRank, resolveMove, moveLabel, entryPlayer, entryRenewal } from "./
 const ACTIVE_DAYS = Number(process.env.RADAR_ACTIVE_DAYS || 14);
 const MAX_ITEMS = Number(process.env.RADAR_MAX_ITEMS || 5);
 
+// Base scores are deliberately well short of the 92 cap on their own — the
+// cap should only be reached by a genuinely exceptional story (several
+// corroborating sources, real momentum), not by advanced stage alone. The
+// previous values (medical=88) meant a single decent source already
+// exceeded the cap, so every medical-stage story showed the same 92%
+// regardless of how well (or poorly) corroborated it actually was.
 const STAGE_BASE = {
-  interest: 18,
-  talks: 32,
-  bid: 48,
-  agreement: 72,
-  medical: 88,
+  interest: 14,
+  talks: 26,
+  bid: 38,
+  agreement: 54,
+  medical: 70,
 };
 
 /**
@@ -58,9 +64,9 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
     const avgWeight =
       events.reduce((a, e) => a + (e.weight ?? 5), 0) / events.length;
 
-    let score = STAGE_BASE[topStage] ?? 18;
-    score += Math.min(3, handles.length - 1) * 7; // corroboration
-    score += ((avgWeight - 5) / 5) * 8; // source quality vs baseline
+    let score = STAGE_BASE[topStage] ?? 14;
+    score += Math.min(3, handles.length - 1) * 5; // corroboration (up to +15, 4+ sources)
+    score += ((avgWeight - 5) / 5) * 6; // source quality vs baseline (up to +6)
 
     // Momentum: only a real bonus if the story has genuinely escalated past
     // an established EARLIER stage. A story with no events older than 72h
@@ -72,7 +78,7 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
     if (olderEvents.length) {
       const olderTop = olderEvents.reduce((best, e) => Math.max(best, stageRank(e.stage)), 0);
       const recent = events.filter((e) => now - new Date(e.createdAt) < 72 * 3600_000);
-      if (recent.some((e) => stageRank(e.stage) > olderTop)) score += 8;
+      if (recent.some((e) => stageRank(e.stage) > olderTop)) score += 6;
     }
 
     // Decay: quiet for 5+ days
