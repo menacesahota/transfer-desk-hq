@@ -9,7 +9,7 @@
  * It is presented as the desk's read, not a statistical claim.
  */
 
-import { stageRank, resolveMove, moveLabel, entryPlayer, entryRenewal } from "./entities.js";
+import { stageRank, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
 
 const ACTIVE_DAYS = Number(process.env.RADAR_ACTIVE_DAYS || 14);
 const MAX_ITEMS = Number(process.env.RADAR_MAX_ITEMS || 5);
@@ -41,8 +41,10 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
   for (const e of log) {
     if (!e.playerKey || !e.stage) continue;
     if (entryRenewal(e)) continue; // staying put is not a transfer rumour
-    if (!byPlayer.has(e.playerKey)) byPlayer.set(e.playerKey, []);
-    byPlayer.get(e.playerKey).push(e);
+    const key = entryPlayerKey(e);
+    if (!key) continue;
+    if (!byPlayer.has(key)) byPlayer.set(key, []);
+    byPlayer.get(key).push(e);
   }
 
   const items = [];

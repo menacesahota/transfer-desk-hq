@@ -4,7 +4,7 @@
  * post a "Day N" timeline update, threaded onto the previous saga post.
  */
 
-import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryRenewal } from "./entities.js";
+import { stageRank, stageLabel, resolveMove, moveLabel, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
 
 const SAGA_MIN_EVENTS = Number(process.env.SAGA_MIN_EVENTS || 2);
 const SAGA_MAX_AGE_DAYS = Number(process.env.SAGA_MAX_AGE_DAYS || 45);
@@ -18,8 +18,10 @@ export function buildSagas(log, { now = Date.now() } = {}) {
     if (!e.playerKey || !e.stage) continue;
     if (new Date(e.createdAt).getTime() < cutoff) continue;
     if (entryRenewal(e)) continue; // renewals are not transfer sagas
-    if (!byPlayer.has(e.playerKey)) byPlayer.set(e.playerKey, []);
-    byPlayer.get(e.playerKey).push(e);
+    const key = entryPlayerKey(e);
+    if (!key) continue;
+    if (!byPlayer.has(key)) byPlayer.set(key, []);
+    byPlayer.get(key).push(e);
   }
 
   const sagas = [];

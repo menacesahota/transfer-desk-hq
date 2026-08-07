@@ -327,6 +327,25 @@ function indexOfWord(lower, alias) {
   return m ? m.index + m[0].indexOf(m[1]) : -1;
 }
 
+/**
+ * Nickname -> canonical full name. Breakers routinely use a player's
+ * nickname instead of their formal name (Fabrizio Romano tweeting "Cuti
+ * Romero" for Cristian Romero, for example). Without this, the nickname
+ * and the full name key to two different "players" and the desk ends up
+ * running two separate rumour trackers — and posting twice — for the same
+ * real-world story. Extend this list as new mismatches turn up; only add
+ * an entry you're confident about, since a wrong mapping silently merges
+ * two different real players into one.
+ */
+export const PLAYER_NICKNAMES = {
+  "cuti romero": "Cristian Romero",
+};
+
+function applyNickname(name) {
+  if (!name) return name;
+  return PLAYER_NICKNAMES[name.toLowerCase()] || name;
+}
+
 /** Words that look like names but never are. */
 const NOT_NAME_WORDS = new Set([
   "breaking", "exclusive", "excl", "exc", "just", "in", "here", "we", "go",
@@ -377,9 +396,24 @@ export function isClubbish(name) {
  * original text; returns null when there is no credible player.
  */
 export function entryPlayer(e) {
-  if (e?.player && !isClubbish(e.player)) return e.player;
+  if (e?.player && !isClubbish(e.player)) return applyNickname(e.player);
   const fresh = extractPlayer(e?.original || "");
   return fresh && !isClubbish(fresh) ? fresh : null;
+}
+
+/**
+ * Grouping key for a log entry, always freshly derived from entryPlayer()
+ * rather than trusting the stored e.playerKey — the same reasoning as
+ * entryRenewal(): a key computed and cached at log time can't benefit from
+ * a later canonicalization fix (e.g. a new nickname mapping) unless
+ * consumers re-derive it. Every feature that groups log entries by player
+ * (radar, saga, consensus, scorecard, contract watch, pulse) should use
+ * this instead of reading e.playerKey directly, so a fix like "Cuti Romero"
+ * -> "Cristian Romero" retroactively re-merges already-logged tips instead
+ * of leaving the desk tracking (and posting about) two separate "players".
+ */
+export function entryPlayerKey(e) {
+  return playerKey(entryPlayer(e));
 }
 
 /**
@@ -434,7 +468,7 @@ export function extractPlayerCandidates(text) {
       words.pop();
     }
     if (words.length < 2 || lowerWords.some(isClubWord)) continue;
-    const name = words.join(" ").replace(/[.,!?]+$/, "");
+    const name = applyNickname(words.join(" ").replace(/[.,!?]+$/, ""));
     if (!candidates.some((c) => c.name === name)) candidates.push({ name, index: m.index });
   }
   return candidates;

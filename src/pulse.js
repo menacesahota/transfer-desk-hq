@@ -6,7 +6,7 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { stageLabel, moveLabel, entryDirection, entryPlayer, entryRenewal } from "./entities.js";
+import { stageLabel, moveLabel, entryDirection, entryPlayer, entryPlayerKey, entryRenewal } from "./entities.js";
 
 /** Per-entry direction with safe fallback for entries logged before direction parsing. */
 function entryMove(e) {
@@ -33,7 +33,7 @@ export function buildPulse(log, { hours = PULSE_HOURS, now = Date.now() } = {}) 
   const seen = new Set();
   for (const k of ["done", "medical", "agreement", "bid", "talks", "interest"]) {
     byStage[k] = byStage[k].filter((e) => {
-      const key = e.playerKey || e.id;
+      const key = entryPlayerKey(e) || e.id;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

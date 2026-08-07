@@ -10,7 +10,7 @@
  * `e.player` is never trusted — older log entries can hold club-shaped names).
  */
 
-import { entryPlayer, entryRenewal, extractClubs } from "./entities.js";
+import { entryPlayer, entryPlayerKey, entryRenewal, extractClubs } from "./entities.js";
 
 const WATCH_DAYS = Number(process.env.CONTRACTWATCH_DAYS || 3);
 const MAX_ITEMS = Number(process.env.CONTRACTWATCH_MAX_ITEMS || 5);
@@ -71,8 +71,10 @@ export function computeContractWatch(log, { days = WATCH_DAYS, now = Date.now() 
     if (!entryRenewal(e)) continue; // transfers belong on the radar, not here
     if (!entryPlayer(e)) continue; // club-shaped / unnamed chatter
     if (new Date(e.createdAt).getTime() < cutoff) continue;
-    if (!byPlayer.has(e.playerKey)) byPlayer.set(e.playerKey, []);
-    byPlayer.get(e.playerKey).push(e);
+    const key = entryPlayerKey(e);
+    if (!key) continue;
+    if (!byPlayer.has(key)) byPlayer.set(key, []);
+    byPlayer.get(key).push(e);
   }
 
   const items = [];

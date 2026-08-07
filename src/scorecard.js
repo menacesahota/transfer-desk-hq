@@ -4,7 +4,7 @@
  * player later (or already) reaches "done" — from any source — within the window.
  */
 
-import { stageRank } from "./entities.js";
+import { stageRank, entryPlayerKey } from "./entities.js";
 
 const VERIFY_WINDOW_DAYS = Number(process.env.SCORECARD_VERIFY_DAYS || 21);
 const MIN_CLAIMS = Number(process.env.SCORECARD_MIN_CLAIMS || 3);
@@ -19,9 +19,11 @@ export function computeScores(log, { now = Date.now() } = {}) {
   const doneByPlayer = new Map();
   for (const e of log) {
     if (e.playerKey && e.stage === "done") {
+      const key = entryPlayerKey(e);
+      if (!key) continue;
       const t = new Date(e.createdAt).getTime();
-      const prev = doneByPlayer.get(e.playerKey);
-      if (prev == null || t < prev) doneByPlayer.set(e.playerKey, t);
+      const prev = doneByPlayer.get(key);
+      if (prev == null || t < prev) doneByPlayer.set(key, t);
     }
   }
 
@@ -29,7 +31,7 @@ export function computeScores(log, { now = Date.now() } = {}) {
   for (const e of log) {
     if (!e.playerKey || stageRank(e.stage) < CLAIM_MIN_RANK) continue;
     const t = new Date(e.createdAt).getTime();
-    const doneAt = doneByPlayer.get(e.playerKey);
+    const doneAt = doneByPlayer.get(entryPlayerKey(e));
     const windowMs = VERIFY_WINDOW_DAYS * 86400_000;
 
     let outcome;
