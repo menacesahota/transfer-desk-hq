@@ -67,6 +67,18 @@ function mentions(text, player, club) {
   return hasPlayer && hasClub;
 }
 
+// A real case this missed: "Yan Diomande -> PSG" got "verified" because
+// plenty of past-week articles genuinely mention Diomande + PSG together —
+// they just say PSG PULLED OUT and he signed for Real Madrid instead. Pure
+// keyword co-occurrence can't tell "X joins Y" from "X snubs Y" / "Y drops
+// out of the race for X". A result matching on names but ALSO carrying
+// reversal language should count AGAINST the claim, not for it.
+const NEGATION = /\b(pull(?:s|ed)?\s+out|pulled\s+the\s+plug|collapse[sd]?|fall[s]?\s+through|fell\s+through|rule[sd]?\s+out|ruled\s+out|no\s+longer|instead\s+of|rather\s+than|opts?\s+(?:for|against)|snubbed|snubs|rejects?|rejected|turn(?:s|ed)?\s+down|in\s+doubt|considering\s+(?:the\s+)?(?:file|deal)\s+closed|deal\s+(?:is\s+)?off|not\s+(?:happening|moving\s+forward)|scrapped|abandon(?:s|ed)?|walks?\s+away|withdraw[sn]?|out\s+of\s+the\s+race|missed?\s+out|lose[s]?\s+out|lost\s+out)\b/i;
+
+function hasNegation(text) {
+  return NEGATION.test(fold(text));
+}
+
 /**
  * Verify a player+club story against recent web news before posting it.
  * Returns { verified, reason, query, checked } — never throws. On a search
@@ -92,9 +104,23 @@ export async function verifyMove({ player, to, from, stage }) {
     const items = await searchNews(query);
     const club = to || from;
     const matches = items.filter((n) => mentions(`${n.title} ${n.snippet}`, player, club));
-    result = matches.length
-      ? { verified: true, reason: `corroborated by ${matches.length} recent result(s)`, query, checked: items.length }
-      : { verified: false, reason: "no recent web results corroborate this", query, checked: items.length };
+    const reversed = matches.filter((n) => hasNegation(`${n.title} ${n.snippet}`));
+
+    if (!matches.length) {
+      result = { verified: false, reason: "no recent web results corroborate this", query, checked: items.length };
+    } else if (reversed.length) {
+      // Any matching result carrying reversal language (pulled out, fell
+      // through, snubbed, etc.) holds the post — better to miss a cycle
+      // than confidently state a story that's already been reversed.
+      result = {
+        verified: false,
+        reason: `${reversed.length} recent result(s) suggest this move did NOT happen as stated (e.g. "${reversed[0].title}")`,
+        query,
+        checked: items.length,
+      };
+    } else {
+      result = { verified: true, reason: `corroborated by ${matches.length} recent result(s)`, query, checked: items.length };
+    }
   } catch (err) {
     // Fail open — see doc comment above.
     result = { verified: true, reason: `search failed, posting anyway (${err.message})`, query, checked: 0 };
