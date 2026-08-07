@@ -151,7 +151,13 @@ export const STAGES = [
 ];
 
 const STAGE_PATTERNS = [
-  ["done", /\b(here we go|done deal|completed the signing|have completed|transfer complete|has signed|have signed|officially?\s+(?:announced|confirmed|unveiled)|joins from|announcement)\b/i],
+  // Official confirmations are frequently headline-style ("Orozco signs for
+  // United", "Man Utd officially confirm sixth summer signing", "Official:
+  // X joins Y") rather than the narrower "has signed" / "done deal" wording
+  // this pattern originally required — a real deal completing was missed
+  // entirely (still scored as a live "agreement" rumour) because none of
+  // the source tweets happened to use those exact phrases.
+  ["done", /here we go|done deal|completed the signing|have completed|transfer complete|\bhas signed\b|\bhave signed\b|officially?\s+(?:announce[sd]?|confirm(?:s|ed)?|unveil(?:s|ed)?)|\bofficial\s*:|\bconfirms?\s+(?:the\s+)?(?:\w+\s+){0,3}signing\b|joins from|\bsigns\s+for\b|\bsigns\s+(?:a\s+)?(?:[\w-]+[- ]?year\s+)?(?:deal|contract)\b|announcement/i],
   ["medical", /\bmedical\b/i],
   ["agreement", /\b(agreement|agreed|personal terms|verbal agreement|set to sign|set to join|close to signing|close to joining|closing in on|on the verge|poised to)\b/i],
   ["bid", /\b(bid|offer|proposal|tabled|submitted|rejected|turned down|knocked back)\b/i],
