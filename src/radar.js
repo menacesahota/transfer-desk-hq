@@ -62,12 +62,18 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
     score += Math.min(3, handles.length - 1) * 7; // corroboration
     score += ((avgWeight - 5) / 5) * 8; // source quality vs baseline
 
-    // Momentum: stage escalated in the last 72h
-    const recent = events.filter((e) => now - new Date(e.createdAt) < 72 * 3600_000);
-    const olderTop = events
-      .filter((e) => now - new Date(e.createdAt) >= 72 * 3600_000)
-      .reduce((best, e) => Math.max(best, stageRank(e.stage)), 0);
-    if (recent.some((e) => stageRank(e.stage) > olderTop)) score += 8;
+    // Momentum: only a real bonus if the story has genuinely escalated past
+    // an established EARLIER stage. A story with no events older than 72h
+    // has nothing to escalate FROM yet — every fresh story would otherwise
+    // get this credit "for free" (olderTop defaulting to 0 beats any
+    // stage), which is what silently pushed nearly every multi-source or
+    // advanced-stage story to the 92% ceiling regardless of real momentum.
+    const olderEvents = events.filter((e) => now - new Date(e.createdAt) >= 72 * 3600_000);
+    if (olderEvents.length) {
+      const olderTop = olderEvents.reduce((best, e) => Math.max(best, stageRank(e.stage)), 0);
+      const recent = events.filter((e) => now - new Date(e.createdAt) < 72 * 3600_000);
+      if (recent.some((e) => stageRank(e.stage) > olderTop)) score += 8;
+    }
 
     // Decay: quiet for 5+ days
     const quietDays = (now - latestAt) / 86400_000;
