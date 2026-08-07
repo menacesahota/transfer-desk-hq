@@ -179,6 +179,16 @@ export function detectStage(text) {
   return null;
 }
 
+/** Every stage keyword found in the text, with its position. */
+function findStageMatches(text) {
+  const found = [];
+  for (const [stage, re] of STAGE_PATTERNS) {
+    const m = text.match(re);
+    if (m) found.push({ stage, index: m.index });
+  }
+  return found;
+}
+
 /** Club mentions with positions, in order of appearance. */
 export function extractClubMatches(text) {
   const lower = String(text || "").toLowerCase();
@@ -224,7 +234,11 @@ const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejec
 const INTEREST_AFTER = /^\s*(?:are|is|have|has|remain)\s+(?:interested|keen|monitoring|tracking|keeping\s+tabs|eyeing|targeting|in\s+talks|pushing|leading\s+the\s+race|favourites)/i;
 
 /** Contract renewal / stay cues — this is not a transfer. */
-const RENEWAL_CUES = /\b(?:new (?:contract|deal|terms)|contract (?:extension|offer|renewal|talks)|extend(?:s|ed|ing)? (?:his |her |their )?(?:contract|stay|deal)|extension (?:at|with|until)|renew(?:s|ed|ing|al)?|stay(?:s|ing)? (?:at|with|put)|set to stay|expected to stay|wants? to stay|commit(?:s|ted|ting)? (?:his|her|their) future|pen(?:s|ned|ning)? a new|fresh terms|improved (?:contract|deal|terms)|(?:contract|deal) until 20\d\d|tie (?:him|her|them) down|off the market)\b/i;
+// "new (?:contract|deal|terms)" alone missed common real-world phrasing like
+// "a new long-term contract" / "a new five-year deal" / "a new bumper
+// contract extension" — the adjective between "new" and the noun broke the
+// direct-adjacency match. Now allows up to 3 filler words/hyphenated tokens.
+const RENEWAL_CUES = /\b(?:new(?:\s+[a-z-]+){0,3}\s+(?:contract|deal|terms)|contract (?:extension|offer|renewal|talks)|extend(?:s|ed|ing)? (?:his |her |their )?(?:contract|stay|deal)|extension (?:at|with|until)|renew(?:s|ed|ing|al)?|stay(?:s|ing)? (?:at|with|put)|set to stay|expected to stay|wants? to stay|commit(?:s|ted|ting)? (?:his|her|their) future|pen(?:s|ned|ning)? a new|fresh terms|improved (?:contract|deal|terms)|(?:contract|deal) until 20\d\d|tie (?:him|her|them) down|off the market|reached (?:a |an )?(?:verbal )?agreement on a new|verbal agreement on (?:a |an )?new)\b/i;
 
 /**
  * True when a tip is about a player staying / re-signing, not moving.
@@ -242,10 +256,18 @@ export function detectRenewal(text) {
   return true;
 }
 
-/** Renewal flag for a log entry; entries logged before this flag are re-analysed. */
+/**
+ * Renewal flag for a log entry. Always re-derived from the original text
+ * with the CURRENT detectRenewal logic when available — trusting a stored
+ * isRenewal flag blindly meant a tip logged before a renewal-detection fix
+ * (e.g. the "new long-term contract" phrasing gap) stayed wrongly flagged
+ * as a transfer forever, even after the underlying bug was fixed. Only
+ * falls back to the stored flag when there's no original text to re-check.
+ */
 export function entryRenewal(e) {
+  if (e?.original) return detectRenewal(e.original);
   if (typeof e?.isRenewal === "boolean") return e.isRenewal;
-  return detectRenewal(e?.original || "");
+  return false;
 }
 
 /**
@@ -358,15 +380,27 @@ export function entryPlayer(e) {
  * Best-effort player name extraction: first run of 2–4 capitalised words
  * that isn't a club, competition, or known junk. Falls back to null.
  */
-export function extractPlayer(text) {
-  const clean = String(text || "")
+/** Cleaned text used consistently by both player-candidate and stage-position scanning. */
+function cleanForNames(text) {
+  return String(text || "")
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/[@#]\w+/g, " ")
     .replace(/["“”«»]/g, " ")
     // Break capitalised-word runs at sentence/clause boundaries so
     // "…Alexander Isak. Negotiations underway" doesn't merge.
     .replace(/[.!?,;:]\s+/g, " ¦ ");
+}
 
+/**
+ * Every plausible player name in the text (2–4 capitalised words, staff and
+ * club names filtered out), each with its position in the cleaned text.
+ * A tip naming two different transfer subjects — "James Trafford completes
+ * medical... Man City turn to Geronimo Rulli as backup" — yields two
+ * candidates here; extractEntities() uses their positions relative to the
+ * stage keywords to work out which one the story is actually about.
+ */
+export function extractPlayerCandidates(text) {
+  const clean = cleanForNames(text);
   const NAME_TOKEN = "\\p{Lu}[\\p{L}'’.-]+";
   // Lowercase particles allowed inside names: de Ligt, van Dijk, dos Santos…
   const PARTICLE = "(?:de|del|della|di|da|van|von|der|den|ter|ten|la|le|dos|das|el|al)";
@@ -375,6 +409,7 @@ export function extractPlayer(text) {
     "gu"
   );
 
+  const candidates = [];
   for (const m of clean.matchAll(runRe)) {
     // Skip staff names: "Crystal Palace chairman Steve Parish", "boss Mikel Arteta"
     if (ROLE_BEFORE.test(clean.slice(0, m.index))) continue;
@@ -393,9 +428,99 @@ export function extractPlayer(text) {
       words.pop();
     }
     if (words.length < 2 || lowerWords.some(isClubWord)) continue;
-    return words.join(" ").replace(/[.,!?]+$/, "");
+    const name = words.join(" ").replace(/[.,!?]+$/, "");
+    if (!candidates.some((c) => c.name === name)) candidates.push({ name, index: m.index });
   }
-  return null;
+  return candidates;
+}
+
+/** Best-effort single player name — first valid candidate found. */
+export function extractPlayer(text) {
+  return extractPlayerCandidates(text)[0]?.name ?? null;
+}
+
+/**
+ * When a tip names more than one plausible player, work out which one the
+ * story is actually about using clause boundaries (the "¦" breaks
+ * cleanForNames() inserts at sentence/clause punctuation), not raw
+ * character distance across the whole tip. Raw nearest-distance was tried
+ * first and got two real cases backwards:
+ *   - "James Trafford completes medical... Man City now targeting Geronimo
+ *     Rulli as backup" — "targeting" sits immediately next to "Rulli", so
+ *     nearest-distance picked Rulli/interest over the correct Trafford/
+ *     medical, even though medical is the far more advanced (higher-rank)
+ *     stage and belongs to a clause naming only Trafford.
+ *   - "Arsenal want Bruno Guimarães to partner Declan Rice in midfield,
+ *     initial contact made with Newcastle" — Rice is only an incidental
+ *     mention (object of "partner"), but sits textually closer to "contact"
+ *     than the real subject Guimarães does, so nearest-distance wrongly
+ *     picked Rice/talks.
+ *
+ * Fix: attribute each stage keyword to a candidate using clause-local
+ * evidence, weighted by stage rank so a clearly more advanced stage
+ * (medical) beats a weaker one (interest) even if the weaker one sits
+ * physically closer to some other name:
+ *   1. A clause containing exactly ONE candidate claims any stage keyword
+ *      in that same clause outright (unambiguous local attribution).
+ *   2. A clause with 2+ candidates and a stage keyword resolves by nearest
+ *      distance WITHIN that clause only.
+ *   3. A stage keyword whose own clause has no candidate at all (like the
+ *      Guimarães/Rice trailing clause) is attributed to the tip's
+ *      first-mentioned candidate — the default subject — rather than
+ *      whichever name happens to sit closest across a clause boundary.
+ *   4. Among all resulting (candidate, stage) pairings, the highest-rank
+ *      stage wins; ties break toward the first-mentioned candidate.
+ */
+export function extractSubjectAndStage(text) {
+  const clean = cleanForNames(text);
+  const candidates = extractPlayerCandidates(text);
+  const stageMatches = findStageMatches(clean);
+
+  if (candidates.length <= 1 || !stageMatches.length) {
+    return { player: candidates[0]?.name ?? null, stage: detectStage(text) };
+  }
+
+  // Clause boundaries from the "¦" markers cleanForNames() inserts.
+  const clauseBreaks = [];
+  const breakRe = /¦/g;
+  let m;
+  while ((m = breakRe.exec(clean))) clauseBreaks.push(m.index);
+  const clauseOf = (idx) => clauseBreaks.filter((b) => b < idx).length;
+
+  const candidatesByClause = new Map();
+  for (const c of candidates) {
+    const cl = clauseOf(c.index);
+    if (!candidatesByClause.has(cl)) candidatesByClause.set(cl, []);
+    candidatesByClause.get(cl).push(c);
+  }
+
+  const pairings = [];
+  for (const s of stageMatches) {
+    const cl = clauseOf(s.index);
+    const local = candidatesByClause.get(cl) || [];
+    if (local.length === 1) {
+      pairings.push({ player: local[0].name, stage: s.stage, index: local[0].index });
+    } else if (local.length > 1) {
+      const nearest = local.reduce((best, c) =>
+        Math.abs(c.index - s.index) < Math.abs(best.index - s.index) ? c : best
+      );
+      pairings.push({ player: nearest.name, stage: s.stage, index: nearest.index });
+    } else {
+      // Orphan stage keyword: no candidate shares its clause — attribute
+      // to the tip's default (first-mentioned) subject.
+      pairings.push({ player: candidates[0].name, stage: s.stage, index: candidates[0].index });
+    }
+  }
+
+  const best = pairings.reduce((top, p) => {
+    if (!top) return p;
+    if (stageRank(p.stage) !== stageRank(top.stage)) {
+      return stageRank(p.stage) > stageRank(top.stage) ? p : top;
+    }
+    return p.index < top.index ? p : top; // tie-break: first-mentioned wins
+  }, null);
+
+  return { player: best.player, stage: best.stage };
 }
 
 /** Stable key for grouping tips about the same player. */
@@ -468,7 +593,7 @@ export function buildSurnameIndex(log) {
 
 /** Extract everything at once from a tip's original text. */
 export function extractEntities(text, { surnameIndex } = {}) {
-  let player = extractPlayer(text);
+  let { player, stage } = extractSubjectAndStage(text);
   if (!player && surnameIndex) {
     const candidate = extractSurnameCandidate(text);
     if (candidate) {
@@ -484,7 +609,7 @@ export function extractEntities(text, { surnameIndex } = {}) {
     toClub: to,
     fromClub: from,
     isRenewal: detectRenewal(text),
-    stage: detectStage(text),
+    stage,
     fee: extractFeeMillions(String(text || "")),
   };
 }
