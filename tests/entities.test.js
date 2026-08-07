@@ -14,6 +14,7 @@ import {
   detectRenewal,
   entryPlayer,
   entryPlayerKey,
+  entryStage,
   playerKey,
   clubHashtag,
   clubHashtags,
@@ -133,6 +134,16 @@ test("entryPlayer re-derives from original text when the stored player is club-s
   const entry = { player: "Al Gharafa", original: "Ismael Bennacer set to leave AC Milan for Al Gharafa" };
   assert.equal(entryPlayer(entry), "Ismael Bennacer");
   assert.equal(entryPlayerKey(entry), playerKey("Ismael Bennacer"));
+});
+
+// --- entryStage always re-derives from original text -----------------------
+test("entryStage re-derives from original text rather than trusting a stale stored stage", () => {
+  const entry = { stage: "talks", original: "OFFICIAL: Test Player signs for Arsenal" };
+  assert.equal(entryStage(entry), "done");
+});
+
+test("entryStage falls back to the stored stage when there's no original text", () => {
+  assert.equal(entryStage({ stage: "bid" }), "bid");
 });
 
 // --- playerKey collapses middle names but keeps distinct first names -------

@@ -21,6 +21,12 @@ import {
   contractWatchPostKey,
   buildContractWatchPost,
 } from "./contractwatch.js";
+import {
+  computeBirthdaysToday,
+  computeOnThisDaySignings,
+  almanacPostKey,
+  buildAlmanacPost,
+} from "./almanac.js";
 import { SMOKETEST_KEY, smokeTestEnabled, buildSmokeTestPost } from "./smoketest.js";
 import { postTweet, saveDraft } from "./post.js";
 import { verifyStory, hasSerperKey } from "./verify.js";
@@ -30,6 +36,7 @@ const RADAR_HOUR = Number(process.env.RADAR_HOUR ?? 9); // UTC hour; -1 = off
 const RADAR_MIN_ITEMS = Number(process.env.RADAR_MIN_ITEMS || 3);
 const CONTRACTWATCH_HOUR = Number(process.env.CONTRACTWATCH_HOUR ?? 11); // UTC hour; -1 = off
 const CONTRACTWATCH_MIN_ITEMS = Number(process.env.CONTRACTWATCH_MIN_ITEMS || 2);
+const ALMANAC_HOUR = Number(process.env.ALMANAC_HOUR ?? 8); // UTC hour; -1 = off
 const SCORECARD_DAY = Number(process.env.SCORECARD_DAY ?? 0); // 0 = Sunday, -1 = off
 const PULSE_EVERY_CYCLES = Number(process.env.PULSE_EVERY_CYCLES || 0); // 0 = manual only
 
@@ -231,7 +238,26 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       }
     }
 
-    // 7) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
+    // 7) Daily almanac — birthdays (TheSportsDB) + on-this-day confirmed
+    // signings drawn from the desk's OWN historical log. No fact-check gate
+    // needed here: birthdays are resolved live against TheSportsDB itself
+    // (already a verification source), and on-this-day only ever restates
+    // something the desk already logged from a real breaker tip.
+    if (ALMANAC_HOUR >= 0 && new Date().getUTCHours() >= ALMANAC_HOUR) {
+      const key = almanacPostKey();
+      if (!hasPosted(state, key)) {
+        const birthdays = await computeBirthdaysToday(log);
+        const onThisDay = computeOnThisDaySignings(log);
+        const text = buildAlmanacPost(birthdays, onThisDay);
+        if (text) {
+          console.log(`\n[almanac]\n${text}\n`);
+          const result = await publishExtra({ text, kind: "almanac", publish });
+          if (result.ok) markPosted(state, key);
+        }
+      }
+    }
+
+    // 8) Pulse (opt-in from watch via PULSE_EVERY_CYCLES; e.g. deadline day)
     if (PULSE_EVERY_CYCLES > 0 && cycleCount > 0 && cycleCount % PULSE_EVERY_CYCLES === 0) {
       await emitPulse({ publish, state });
     }

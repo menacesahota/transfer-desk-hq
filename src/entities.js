@@ -829,6 +829,18 @@ export function entryDirection(e) {
   return { to: null, from: null };
 }
 
+/**
+ * Deal stage for a log entry, re-derived from the original text when
+ * available — same reasoning as entryRenewal/entryPlayerKey: an entry
+ * logged before a stage-detection fix (e.g. the "done" pattern widening in
+ * 928bf75) shouldn't stay stuck with the stale classification forever.
+ * Only falls back to the stored e.stage when there's no original text.
+ */
+export function entryStage(e) {
+  if (e?.original) return detectStage(e.original);
+  return e?.stage ?? null;
+}
+
 export function resolveMove(events) {
   let to = null;
   let from = null;

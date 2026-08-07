@@ -15,6 +15,12 @@ import {
 } from "./contractwatch.js";
 import { buildSmokeTestPost, SMOKETEST_KEY } from "./smoketest.js";
 import {
+  computeBirthdaysToday,
+  computeOnThisDaySignings,
+  buildAlmanacPost,
+  almanacPostKey,
+} from "./almanac.js";
+import {
   computeRumourUpdates,
   buildRumourWatchPost,
   rumourWatchStateKey,
@@ -221,6 +227,24 @@ async function rumourwatch() {
   if (process.argv[3] === "--post") await saveState(state);
 }
 
+async function almanac() {
+  const log = await loadLog();
+  const birthdays = await computeBirthdaysToday(log);
+  const onThisDay = computeOnThisDaySignings(log);
+  const post = buildAlmanacPost(birthdays, onThisDay);
+  if (!post) {
+    return console.log("Nothing for the almanac today (no tracked-player birthdays, no logged on-this-day signings).");
+  }
+  console.log(post);
+  if (process.argv[3] === "--post") {
+    const posted = await postTweet(post);
+    console.log(`\nPosted: https://x.com/TransferDeskHQ/status/${posted.id}`);
+    const state = await loadState();
+    markPosted(state, almanacPostKey());
+    await saveState(state);
+  }
+}
+
 async function smoketest() {
   const post = buildSmokeTestPost();
   console.log(post);
@@ -249,12 +273,13 @@ const runners = {
   radar,
   contracts,
   rumourwatch,
+  almanac,
   smoketest,
 };
 
 if (!runners[cmd]) {
   console.log(
-    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts | rumourwatch | smoketest"
+    "Usage: npm run news | draft | post | watch | verify | consensus | sagas | scorecard | pulse | radar | contracts | rumourwatch | almanac | smoketest"
   );
   process.exit(1);
 }

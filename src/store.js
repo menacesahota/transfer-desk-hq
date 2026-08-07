@@ -12,6 +12,7 @@ const DATA_DIR = path.resolve(STORAGE_DIR, "data");
 const LOG_PATH = path.join(DATA_DIR, "tiplog.json");
 const STATE_PATH = path.join(DATA_DIR, "feature-state.json");
 const CURSORS_PATH = path.join(DATA_DIR, "x-cursors.json");
+const BIRTHDAYS_PATH = path.join(DATA_DIR, "birthdays.json");
 
 const LOG_MAX_ENTRIES = 5000;
 const LOG_MAX_AGE_DAYS = 120;
@@ -132,6 +133,22 @@ export async function loadXCursors() {
 
 export async function saveXCursors(cursors) {
   await writeJson(CURSORS_PATH, cursors);
+}
+
+/**
+ * Player -> birth date cache for the almanac feature. A player's birth date
+ * never changes, so once resolved via TheSportsDB it's kept forever (no TTL)
+ * instead of re-querying the same players every single day the feature
+ * runs. Shape: { [playerKey]: { name, dateBorn: "YYYY-MM-DD" | null,
+ * checkedAt } } — dateBorn: null means "looked up, nothing found" (also
+ * cached, so an obscure/unlisted name isn't re-queried daily either).
+ */
+export async function loadBirthdayCache() {
+  return readJson(BIRTHDAYS_PATH, {});
+}
+
+export async function saveBirthdayCache(cache) {
+  await writeJson(BIRTHDAYS_PATH, cache);
 }
 
 /** ISO week id like "2026-W32" for weekly scorecards. */

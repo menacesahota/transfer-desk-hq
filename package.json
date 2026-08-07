@@ -17,6 +17,7 @@
     "radar": "node src/cli.js radar",
     "contracts": "node src/cli.js contracts",
     "rumourwatch": "node src/cli.js rumourwatch",
+    "almanac": "node src/cli.js almanac",
     "smoketest": "node src/cli.js smoketest",
     "test": "node --test tests/*.test.js"
   },
