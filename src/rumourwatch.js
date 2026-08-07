@@ -17,6 +17,12 @@ const MIN_DELTA = Number(process.env.RUMOURWATCH_DELTA || 12);
 const MIN_FIRST_LIKELIHOOD = Number(process.env.RUMOURWATCH_MIN_FIRST || 30);
 const MIN_HOURS_BETWEEN = Number(process.env.RUMOURWATCH_COOLDOWN_HOURS || 3);
 const MAX_PER_CYCLE = Number(process.env.RUMOURWATCH_MAX_PER_CYCLE || 1);
+// A story can sit quietly, then cross the likelihood threshold later purely
+// from decay/corroboration math working itself out — not because anything
+// actually happened recently. Posting that as "first tracked odds" reads as
+// breaking news about a source tweet that's actually days old. Gate on the
+// most recent CONTRIBUTING tip being genuinely recent, not just the score.
+const MAX_SOURCE_AGE_HOURS = Number(process.env.RUMOURWATCH_MAX_AGE_HOURS || 36);
 
 /**
  * Decide which active rumours are due an update post, given what we last
@@ -27,6 +33,9 @@ export function computeRumourUpdates(log, rumourWatchState = {}, { now = Date.no
   const due = [];
 
   for (const item of scoreAllRumours(log, { now })) {
+    const ageHours = (now - new Date(item.latestAt).getTime()) / 3600_000;
+    if (!(ageHours <= MAX_SOURCE_AGE_HOURS)) continue; // stale — nothing new to report
+
     const last = rumourWatchState[item.playerKey];
 
     if (last) {

@@ -100,6 +100,7 @@ export function scoreAllRumours(log, { now = Date.now() } = {}) {
       sources: handles.length,
       lead: events[0].handle,
       likelihood: score,
+      latestAt: latest.createdAt, // most recent contributing tip — used to gate "is this actually fresh?"
     });
   }
 
