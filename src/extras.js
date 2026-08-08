@@ -5,6 +5,7 @@
  */
 
 import { BREAKERS } from "./config.js";
+import { stageHasRegressed, recordMaxStage } from "./stage-guard.js";
 import { recordTips, loadLog, loadState, saveState, hasPosted, markPosted, isoWeek } from "./store.js";
 import { findClusters, clusterPostKey, buildConsensusPost } from "./consensus.js";
 import { buildSagas, sagaPostKey, buildSagaPost } from "./saga.js";
@@ -151,11 +152,18 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       if (emitted >= MAX_EXTRAS_PER_CYCLE) break;
       const key = clusterPostKey(cluster);
       if (hasPosted(state, key) || !cluster.player) continue;
+      if (stageHasRegressed(state, cluster.playerKey, cluster.stage)) {
+        console.log(`[consensus] HELD — ${cluster.player}: stage '${cluster.stage}' is not past the highest stage already announced`);
+        continue;
+      }
       if (!(await factCheck({ kind: "consensus", player: cluster.player, to: cluster.move?.to, from: cluster.move?.from, stage: cluster.stage }))) continue;
       const text = buildConsensusPost(cluster);
       console.log(`\n[consensus] ${cluster.player} (${cluster.sources} sources)\n${text}\n`);
       const result = await publishExtra({ text, kind: "consensus", publish });
-      if (result.ok) markPosted(state, key);
+      if (result.ok) {
+        markPosted(state, key);
+        recordMaxStage(state, cluster.playerKey, cluster.stage);
+      }
       emitted++;
     }
 
@@ -164,6 +172,10 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       if (emitted >= MAX_EXTRAS_PER_CYCLE) break;
       const key = sagaPostKey(saga);
       if (hasPosted(state, key) || !saga.player) continue;
+      if (stageHasRegressed(state, saga.playerKey, saga.stage)) {
+        console.log(`[saga] HELD — ${saga.player}: stage '${saga.stage}' is not past the highest stage already announced`);
+        continue;
+      }
       if (!(await factCheck({ kind: "saga", player: saga.player, to: saga.move?.to, from: saga.move?.from, stage: saga.stage }))) continue;
       const text = buildSagaPost(saga);
       console.log(`\n[saga] ${saga.player} day ${saga.day}\n${text}\n`);
@@ -176,6 +188,7 @@ export async function runExtras({ publish = false, cycleCount = 0 } = {}) {
       if (result.ok) {
         if (result.posted?.id) state.sagaThreads[saga.playerKey] = result.posted.id;
         markPosted(state, key);
+        recordMaxStage(state, saga.playerKey, saga.stage);
       }
       emitted++;
     }

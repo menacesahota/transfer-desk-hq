@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import sharp from "sharp";
 import { getUserClient } from "./x-client.js";
 
 const STORAGE_DIR = process.env.TRANSFER_DESK_STORAGE || ".";
@@ -50,6 +49,11 @@ export async function downloadImage(url, tipId) {
 
 /** Convert any image buffer/file to a black-and-white JPEG. */
 export async function toBlackAndWhite({ filePath, buffer, tipId }) {
+  // Lazy-imported (same reasoning as pulse.js's card renderer): importing
+  // sharp at module load time pulls in its native binary eagerly, which is
+  // slow in some sandboxes and entirely unnecessary for any code path that
+  // never touches an image.
+  const { default: sharp } = await import("sharp");
   await fs.mkdir(MEDIA_DIR, { recursive: true });
   const input = buffer || (await fs.readFile(filePath));
   const safe = String(tipId || path.basename(filePath || "img", path.extname(filePath || "")))

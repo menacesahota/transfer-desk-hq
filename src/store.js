@@ -83,15 +83,18 @@ export async function recordTips(tips, { weights = {} } = {}) {
 
 /**
  * Feature state: which consensus/saga/scorecard posts we've already made,
- * saga thread tweet ids, last scorecard week, rumour-watch odds history, etc.
+ * saga thread tweet ids, last scorecard week, rumour-watch odds history,
+ * highest stage ever announced per player, etc.
  * Shape: { postedKeys: {key: iso}, sagaThreads: {playerKey: tweetId},
- *          rumourWatch: {playerKey: {pct, postedAt}} }
+ *          rumourWatch: {playerKey: {pct, postedAt}},
+ *          maxStage: {playerKey: rank} }
  */
 export async function loadState() {
   const state = await readJson(STATE_PATH, {});
   state.postedKeys ||= {};
   state.sagaThreads ||= {};
   state.rumourWatch ||= {};
+  state.maxStage ||= {};
   return state;
 }
 

@@ -75,9 +75,16 @@ function pickBestName(entries) {
 }
 
 
-/** Stable key so each cluster+stage posts once. */
+/**
+ * Stable key so each cluster+stage posts once. Deliberately does NOT
+ * include the source count — that number naturally fluctuates as more
+ * corroborating tips arrive (or as older ones age out of the consensus
+ * window), and keying on it meant the exact same stage could re-post
+ * every time the count ticked over, even for a story whose real-world
+ * status hadn't changed at all.
+ */
 export function clusterPostKey(cluster) {
-  return `consensus:${cluster.playerKey}:${cluster.stage}:${cluster.sources}`;
+  return `consensus:${cluster.playerKey}:${cluster.stage}`;
 }
 
 function minutesBetween(a, b) {
