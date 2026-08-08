@@ -19,6 +19,8 @@ import {
   clubHashtag,
   clubHashtags,
   isClubbish,
+  resolveMove,
+  moveLabel,
 } from "../src/entities.js";
 
 // --- Cuti Romero nickname (commit 8e77d16) ---------------------------------
@@ -134,6 +136,41 @@ test("entryPlayer re-derives from original text when the stored player is club-s
   const entry = { player: "Al Gharafa", original: "Ismael Bennacer set to leave AC Milan for Al Gharafa" };
   assert.equal(entryPlayer(entry), "Ismael Bennacer");
   assert.equal(entryPlayerKey(entry), playerKey("Ismael Bennacer"));
+});
+
+// --- Single-club fallback defaults to "leaving" when the text says so
+// (live bug: "Roony Bardghji -> Barcelona" posted for a story that was
+// actually about him LEAVING Barcelona, destination unknown) -------------
+test("resolveMove: single-club fallback defaults to origin when the text signals leaving, cue too distant from the club to fire directly", () => {
+  const events = [
+    {
+      handle: "FabrizioRomano",
+      original:
+        "Official: Roony Bardghji does not travel with Barça squad for pre-season game, as he's leaving. Story from yesterday confirmed: Roony will go, loan or permanent with buy back clause.",
+      clubs: ["Barcelona"],
+    },
+  ];
+  assert.deepEqual(resolveMove(events), { to: null, from: "Barcelona" });
+  assert.equal(moveLabel("Roony Bardghji", resolveMove(events)), "Roony Bardghji leaving Barcelona");
+});
+
+test("resolveMove: single-club fallback defaults to origin when 'leaving CLUB' has a prefix (FC) breaking direct cue adjacency", () => {
+  const events = [
+    {
+      handle: "Plettigoal",
+      original:
+        "As revealed, and now officially confirmed: Roony Bardghji is on the verge of leaving FC Barcelona. The clear plan has been in place for weeks. There are multiple enquiries, with talks ongoing.",
+      clubs: ["Barcelona"],
+    },
+  ];
+  assert.deepEqual(resolveMove(events), { to: null, from: "Barcelona" });
+});
+
+test("resolveMove: single-club fallback still defaults to destination when there's no leaving language", () => {
+  const events = [
+    { handle: "FabrizioRomano", original: "Arsenal are strongly linked with a move for this player.", clubs: ["Arsenal"] },
+  ];
+  assert.deepEqual(resolveMove(events), { to: "Arsenal", from: null });
 });
 
 // --- entryStage always re-derives from original text -----------------------

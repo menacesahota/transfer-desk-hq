@@ -347,6 +347,23 @@ const SELL_AFTER = /^\s*(?:have|has)\s+(?:sold|agreed\s+to\s+sell|received|rejec
 /** Interest cues AFTER a club — the interested club is the destination. */
 const INTEREST_AFTER = /^\s*(?:are|is|have|has|remain)\s+(?:interested|keen|monitoring|tracking|keeping\s+tabs|eyeing|targeting|in\s+talks|pushing|leading\s+the\s+race|favourites)/i;
 
+/**
+ * Broad "this player is leaving/exiting" signal, checked ANYWHERE in the
+ * text — deliberately not position-anchored to a specific club mention
+ * like TO_BEFORE/FROM_BEFORE/etc. are. Real case that slipped through
+ * those: "Official: Roony Bardghji does not travel with Barça squad for
+ * pre-season game, as he's leaving" — "leaving" sits at the end of the
+ * sentence, nowhere near "Barça", so no adjacency-based cue fires; another
+ * source's "...is on the verge of leaving FC Barcelona" fails too, since
+ * the "FC " prefix breaks FROM_BEFORE's immediate-adjacency match. Both
+ * left direction fully unresolved, and resolveMove()'s single-club
+ * fallback defaulted the only mentioned club (Barcelona) to the
+ * DESTINATION — posting "Bardghji → Barcelona" for a story that is
+ * actually about him leaving. Used only as a fallback tiebreaker, never
+ * overriding an actual cue match.
+ */
+const LEAVING_SIGNAL = /\b(?:leaving|leaves|left|is\s+set\s+to\s+leave|will\s+leave|to\s+leave|exit(?:ing)?|departure|departing|part(?:s|ed)?\s+ways|does\s+not\s+travel|left\s+out\s+of|not\s+in\s+(?:the\s+)?(?:squad|plans))\b/i;
+
 /** Contract renewal / stay cues — this is not a transfer. */
 // "new (?:contract|deal|terms)" alone missed common real-world phrasing like
 // "a new long-term contract" / "a new five-year deal" / "a new bumper
@@ -852,7 +869,18 @@ export function resolveMove(events) {
   if (!to && !from) {
     for (let i = events.length - 1; i >= 0; i--) {
       const clubs = events[i].clubs?.length ? events[i].clubs : extractClubs(events[i].original || "");
-      if (clubs.length) {
+      if (clubs.length === 1) {
+        // No direction cue matched anywhere and only one club is in play —
+        // the safe default is "joining" (most single-club tips are a
+        // suitor being named), UNLESS the text itself signals the player
+        // is leaving that club, in which case defaulting to "joining"
+        // would state the exact opposite of the real story.
+        const leaving = events.some((e) => LEAVING_SIGNAL.test(e.original || ""));
+        if (leaving) from = clubs[0];
+        else to = clubs[0];
+        break;
+      }
+      if (clubs.length > 1) {
         to = clubs[0];
         break;
       }
