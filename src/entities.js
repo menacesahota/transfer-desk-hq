@@ -183,6 +183,20 @@ export const STAGES = [
   { stage: "done", rank: 6, label: "Done deal" },
 ];
 
+// "done" cues split into two groups so an ambiguous-only match can be told
+// apart from a genuinely unambiguous one (see isAmbiguousDoneOnly below).
+// Concatenated together these are byte-for-byte the same alternation as
+// before the split — order within a single regex alternation doesn't
+// change whether/where it matches, only separates the checks.
+const UNAMBIGUOUS_DONE_CUE =
+  /here we go|done deal|completed the signing|have completed|transfer complete|\bhas signed\b|\bhave signed\b|\bconfirms?\s+(?:the\s+)?(?:\w+\s+){0,3}signing\b|joins from|\bsigns\s+for\b|\bsigns\s+(?:a\s+)?(?:[\w-]+[- ]?year\s+)?(?:deal|contract)\b/i;
+// "Official: X joins Y" is the common case this is for — but the same bare
+// shape ("Official: ...", "officially confirmed ...") also fits a
+// confirmed DEPARTURE with no resolved destination, which is not a done
+// deal. See isAmbiguousDoneOnly.
+const AMBIGUOUS_DONE_CUE = /officially?\s+(?:announce[sd]?|confirm(?:s|ed)?|unveil(?:s|ed)?)|\bofficial\s*:|\bannouncement\b/i;
+const JOIN_SIGNAL = /\bjoin(?:s|ing|ed)?\b|\bsign(?:s|ing|ed)?\b|\bmoves?\s+to\b|\btransfer(?:s|red)?\s+to\b|\bswitch(?:es|ing|ed)?\s+to\b|\bwelcome[sd]?\b/i;
+
 const STAGE_PATTERNS = [
   // Official confirmations are frequently headline-style ("Orozco signs for
   // United", "Man Utd officially confirm sixth summer signing", "Official:
@@ -190,13 +204,36 @@ const STAGE_PATTERNS = [
   // this pattern originally required — a real deal completing was missed
   // entirely (still scored as a live "agreement" rumour) because none of
   // the source tweets happened to use those exact phrases.
-  ["done", /here we go|done deal|completed the signing|have completed|transfer complete|\bhas signed\b|\bhave signed\b|officially?\s+(?:announce[sd]?|confirm(?:s|ed)?|unveil(?:s|ed)?)|\bofficial\s*:|\bconfirms?\s+(?:the\s+)?(?:\w+\s+){0,3}signing\b|joins from|\bsigns\s+for\b|\bsigns\s+(?:a\s+)?(?:[\w-]+[- ]?year\s+)?(?:deal|contract)\b|announcement/i],
+  ["done", new RegExp(`${UNAMBIGUOUS_DONE_CUE.source}|${AMBIGUOUS_DONE_CUE.source}`, "i")],
   ["medical", /\bmedical\b/i],
   ["agreement", /\b(agreement|agreed|personal terms|verbal agreement|set to sign|set to join|close to signing|close to joining|closing in on|on the verge|poised to)\b/i],
   ["bid", /\b(bid|offer|proposal|tabled|submitted|rejected|turned down|knocked back)\b/i],
   ["talks", /\b(talks|negotiations|discussions|meeting|contact)\b/i],
   ["interest", /\b(interest|interested|monitoring|tracking|targeting|eyeing|keen on|linked|enquir|inquir|scouting|shortlist|wants? to sign|looking to sign|pushing to sign|keeping tabs)\b/i],
 ];
+
+/**
+ * True when a "done" match came ONLY from the ambiguous bare cues
+ * ("Official:", "officially confirmed/announced/unveiled") — no
+ * unambiguous done-language present, no join/sign word anywhere in the
+ * text either, AND the text explicitly signals the player is leaving.
+ * Real case that motivated this: both source tips for "Roony Bardghji"
+ * matched "done" purely via "Official:" / "officially confirmed", but
+ * were reporting a confirmed EXIT with the destination still unresolved
+ * ("does not travel... as he's leaving", "on the verge of leaving FC
+ * Barcelona... multiple enquiries, talks ongoing") — not a completed
+ * transfer. A real done deal that also happens to mention the selling
+ * club ("Messi leaves Barcelona to sign for Inter Miami, here we go!")
+ * is unaffected: it has both an unambiguous cue AND a join/sign word,
+ * either of which short-circuits this before LEAVING_SIGNAL is even
+ * checked.
+ */
+function isAmbiguousDoneOnly(t) {
+  if (UNAMBIGUOUS_DONE_CUE.test(t)) return false;
+  if (!AMBIGUOUS_DONE_CUE.test(t)) return false;
+  if (JOIN_SIGNAL.test(t)) return false;
+  return LEAVING_SIGNAL.test(t);
+}
 
 const STAGE_RANK = Object.fromEntries(STAGES.map((s) => [s.stage, s.rank]));
 const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.stage, s.label]));
@@ -213,7 +250,9 @@ export function stageLabel(stage) {
 export function detectStage(text) {
   const t = String(text || "");
   for (const [stage, re] of STAGE_PATTERNS) {
-    if (re.test(t)) return stage;
+    if (!re.test(t)) continue;
+    if (stage === "done" && isAmbiguousDoneOnly(t)) continue; // not a completed transfer — let a lower stage claim it, if any
+    return stage;
   }
   return null;
 }
@@ -223,7 +262,9 @@ function findStageMatches(text) {
   const found = [];
   for (const [stage, re] of STAGE_PATTERNS) {
     const m = text.match(re);
-    if (m) found.push({ stage, index: m.index });
+    if (!m) continue;
+    if (stage === "done" && isAmbiguousDoneOnly(text)) continue; // same reasoning as detectStage()
+    found.push({ stage, index: m.index });
   }
   return found;
 }

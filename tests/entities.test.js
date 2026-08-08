@@ -12,6 +12,7 @@ import {
   extractSubjectAndStage,
   detectDirection,
   detectRenewal,
+  detectStage,
   entryPlayer,
   entryPlayerKey,
   entryStage,
@@ -171,6 +172,37 @@ test("resolveMove: single-club fallback still defaults to destination when there
     { handle: "FabrizioRomano", original: "Arsenal are strongly linked with a move for this player.", clubs: ["Arsenal"] },
   ];
   assert.deepEqual(resolveMove(events), { to: "Arsenal", from: null });
+});
+
+// --- "done" stage requires more than a bare "officially confirmed" when
+// the story is actually about leaving with no resolved destination
+// (same live Bardghji incident, second half of the fix) -------------------
+test("detectStage: bare 'Official:' + leaving language, no join word -> not 'done'", () => {
+  const t = detectStage(
+    "Official: Roony Bardghji does not travel with Barça squad for pre-season game, as he's leaving. Story from yesterday confirmed: Roony will go, loan or permanent with buy back clause."
+  );
+  assert.notEqual(t, "done");
+});
+
+test("detectStage: bare 'officially confirmed' + leaving language falls through to 'agreement' via its own wording", () => {
+  assert.equal(
+    detectStage(
+      "As revealed, and now officially confirmed: Roony Bardghji is on the verge of leaving FC Barcelona. Multiple enquiries, talks ongoing."
+    ),
+    "agreement"
+  );
+});
+
+test("detectStage: a real done deal that also mentions the selling club stays 'done' (unambiguous cue present)", () => {
+  assert.equal(detectStage("Here we go! Messi leaves Barcelona to sign for Inter Miami, here we go!"), "done");
+});
+
+test("detectStage: 'Official: X joins Y' stays 'done' (join word present)", () => {
+  assert.equal(detectStage("Official: Alexander Isak joins Liverpool from Newcastle for a club-record fee."), "done");
+});
+
+test("detectStage: 'officially confirm sixth summer signing' stays 'done' (unambiguous signing cue present)", () => {
+  assert.equal(detectStage("Man Utd officially confirm sixth summer signing of the window."), "done");
 });
 
 // --- entryStage always re-derives from original text -----------------------
