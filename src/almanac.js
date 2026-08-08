@@ -1,8 +1,9 @@
 /**
- * Desk Almanac: daily post pairing two things —
+ * Desk Rewind: daily post pairing two things —
  *
- *   - Birthdays: players the desk has covered recently, whose birthday (any
- *     year) falls today. Sourced from TheSportsDB (same free, no-signup API
+ *   - Birthdays: footballing legends, well-known/popular current players,
+ *     and anyone the desk has covered recently, whose birthday (any year)
+ *     falls today. Sourced from TheSportsDB (same free, no-signup API
  *     already used for the player-identity check in verify.js) — a
  *     player's date of birth is looked up once ever and cached permanently
  *     to data/birthdays.json, since it never changes.
@@ -30,6 +31,7 @@ import {
   entryDirection,
   extractClubs,
   appendHashtags,
+  playerKey,
 } from "./entities.js";
 import { loadBirthdayCache, saveBirthdayCache } from "./store.js";
 
@@ -37,11 +39,49 @@ const SPORTSDB_URL = "https://www.thesportsdb.com/api/v1/json/3/searchplayers.ph
 const TIMEOUT_MS = Number(process.env.VERIFY_TIMEOUT_MS || 8000);
 const BIRTHDAY_LOOKUP_WINDOW_DAYS = Number(process.env.ALMANAC_PLAYER_WINDOW_DAYS || 120);
 const ON_THIS_DAY_MAX_ITEMS = Number(process.env.ALMANAC_MAX_SIGNINGS || 3);
-const BIRTHDAY_MAX_ITEMS = Number(process.env.ALMANAC_MAX_BIRTHDAYS || 5);
+const BIRTHDAY_MAX_ITEMS = Number(process.env.ALMANAC_MAX_BIRTHDAYS || 6);
 
 /**
- * Look up a player's date of birth via TheSportsDB. Returns "YYYY-MM-DD" or
- * null (genuinely not found — also a valid, cacheable result). Unlike
+ * Curated names checked for a birthday every day, on top of whoever the
+ * desk has covered recently. This is a manually-maintained editorial list
+ * (same trust model as PLAYER_NICKNAMES/MONONYMS in entities.js) rather
+ * than an auto-pulled "current Premier League roster" — TheSportsDB's bulk
+ * team/league-roster endpoints turned out to be unreliable/inconsistent on
+ * the free tier when this was built (missing teams, stale gaps), while its
+ * single-player search (searchplayers.php) is solid. A name that isn't
+ * found is just silently skipped (see fetchBirthDate), so a typo or an
+ * unlisted player never risks a wrong post — worst case is a missed
+ * birthday, never a fabricated one. Extend freely.
+ */
+const FOOTBALL_LEGENDS = [
+  "Pele", "Diego Maradona", "Zinedine Zidane", "Ronaldo", "Ronaldinho",
+  "Thierry Henry", "David Beckham", "Paolo Maldini", "Andrea Pirlo",
+  "Xavi Hernandez", "Andres Iniesta", "Franz Beckenbauer", "Johan Cruyff",
+  "George Best", "Bobby Moore", "Alan Shearer", "Steven Gerrard",
+  "Frank Lampard", "Wayne Rooney", "Ryan Giggs", "Paul Scholes", "Roy Keane",
+  "Patrick Vieira", "Dennis Bergkamp", "Ian Wright", "Didier Drogba",
+  "Luka Modric", "Iker Casillas", "Gianluigi Buffon", "Kaka", "Samuel Eto'o",
+  "Michael Owen", "David Ginola", "Eric Cantona", "Peter Schmeichel",
+  "Rio Ferdinand", "John Terry", "Gary Neville", "Jamie Carragher",
+  "Didier Deschamps", "Fabio Cannavaro", "Luis Figo", "Roberto Carlos",
+];
+
+const NOTABLE_PLAYERS = [
+  "Erling Haaland", "Kylian Mbappe", "Mohamed Salah", "Bukayo Saka",
+  "Kevin De Bruyne", "Bruno Fernandes", "Harry Kane", "Jude Bellingham",
+  "Vinicius Junior", "Phil Foden", "Declan Rice", "Martin Odegaard",
+  "Son Heung-min", "Virgil van Dijk", "Rodri", "Jamal Musiala", "Pedri",
+  "Gavi", "Neymar", "Robert Lewandowski", "Lionel Messi", "Cristiano Ronaldo",
+  "Ousmane Dembele", "Florian Wirtz", "Lamine Yamal", "Cole Palmer",
+  "William Saliba", "Alexander Isak", "Ollie Watkins", "James Maddison",
+];
+
+const CURATED_PLAYER_NAMES = [...new Set([...FOOTBALL_LEGENDS, ...NOTABLE_PLAYERS])];
+
+/**
+ * Look up a player's date of birth (and current/most recent club, per
+ * TheSportsDB) via searchplayers.php. Returns { dateBorn, club } with null
+ * fields when genuinely not found — also a valid, cacheable result. Unlike
  * verify.js's isKnownPlayer, this has no "fail open" concept: a lookup
  * failure just means this player's birthday can't be checked today, which
  * is harmless to skip rather than guess at.
@@ -56,9 +96,12 @@ async function fetchBirthDate(name) {
     const data = await res.json();
     const players = Array.isArray(data.player) ? data.player : [];
     const soccer = players.find((p) => !p.strSport || /soccer|football/i.test(p.strSport));
-    return soccer?.dateBorn ? soccer.dateBorn.slice(0, 10) : null;
+    return {
+      dateBorn: soccer?.dateBorn ? soccer.dateBorn.slice(0, 10) : null,
+      club: soccer?.strTeam || null,
+    };
   } catch {
-    return undefined; // undefined = "couldn't check", distinct from null = "checked, no result"
+    return undefined; // undefined = "couldn't check", distinct from a checked-but-empty result
   } finally {
     clearTimeout(timer);
   }
@@ -92,12 +135,44 @@ function trackedPlayers(log, { now = Date.now(), windowDays = BIRTHDAY_LOOKUP_WI
 }
 
 /**
- * Birthdays landing today among recently-covered players. Resolves and
- * permanently caches any not-yet-known birth dates via TheSportsDB (at
- * most once per player, ever); everything else is pure local date math.
+ * Full candidate pool for today's birthday check: the curated legends/
+ * notable-players list, plus anyone the desk has covered recently. Curated
+ * names use their own name as the display name and have no log events
+ * (club comes from TheSportsDB's strTeam instead, see fetchBirthDate);
+ * tracked names use the fullest name seen and their most recent club from
+ * the log. A name tracked in the log AND on the curated list is merged
+ * under one key so it's only ever checked/shown once.
+ */
+function candidatePlayers(log, { now } = {}) {
+  const byKey = trackedPlayers(log, { now });
+  const candidates = new Map();
+
+  for (const [key, events] of byKey) {
+    const name = events
+      .map(entryPlayer)
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length)[0];
+    if (!name) continue;
+    candidates.set(key, { key, name, club: latestClubFor(events) });
+  }
+
+  for (const name of CURATED_PLAYER_NAMES) {
+    const key = playerKey(name);
+    if (!key || candidates.has(key)) continue;
+    candidates.set(key, { key, name, club: null });
+  }
+
+  return [...candidates.values()];
+}
+
+/**
+ * Birthdays landing today among legends, notable/popular players, and
+ * anyone the desk has covered recently. Resolves and permanently caches any
+ * not-yet-known birth dates via TheSportsDB (at most once per player,
+ * ever); everything else is pure local date math.
  */
 export async function computeBirthdaysToday(log, { now = new Date() } = {}) {
-  const byKey = trackedPlayers(log, { now: now.getTime() });
+  const pool = candidatePlayers(log, { now: now.getTime() });
   const cache = await loadBirthdayCache();
   let cacheDirty = false;
 
@@ -106,18 +181,12 @@ export async function computeBirthdaysToday(log, { now = new Date() } = {}) {
   const year = now.getUTCFullYear();
   const results = [];
 
-  for (const [key, events] of byKey) {
-    const name = events
-      .map(entryPlayer)
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length)[0];
-    if (!name) continue;
-
+  for (const { key, name, club } of pool) {
     let cached = cache[key];
     if (!cached) {
-      const dateBorn = await fetchBirthDate(name);
-      if (dateBorn === undefined) continue; // lookup failed — skip, don't cache, try again another day
-      cached = { name, dateBorn, checkedAt: new Date().toISOString() };
+      const fetched = await fetchBirthDate(name);
+      if (fetched === undefined) continue; // lookup failed — skip, don't cache, try again another day
+      cached = { name, dateBorn: fetched.dateBorn, club: fetched.club, checkedAt: new Date().toISOString() };
       cache[key] = cached;
       cacheDirty = true;
     }
@@ -130,7 +199,7 @@ export async function computeBirthdaysToday(log, { now = new Date() } = {}) {
       playerKey: key,
       player: cached.name || name,
       age: year - bYear,
-      club: latestClubFor(events),
+      club: club || cached.club || null,
     });
   }
 
@@ -203,7 +272,7 @@ export function buildAlmanacPost(birthdays, onThisDay, now = new Date()) {
     sections.push(lines.join("\n"));
   }
 
-  const header = `DESK ALMANAC | ${date}`;
+  const header = `DESK REWIND | ${date}`;
   let post = `${header}\n\n${sections.join("\n\n")}`;
 
   // Fit to 280: drop the on-this-day section's oldest lines first, then

@@ -11,12 +11,14 @@ import os from "node:os";
 import path from "node:path";
 
 let computeBirthdaysToday, computeOnThisDaySignings, buildAlmanacPost;
+let saveBirthdayCache;
 let tmpDir;
 
 before(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "almanac-test-"));
   process.env.TRANSFER_DESK_STORAGE = tmpDir;
   ({ computeBirthdaysToday, computeOnThisDaySignings, buildAlmanacPost } = await import("../src/almanac.js"));
+  ({ saveBirthdayCache } = await import("../src/store.js"));
 });
 
 after(async () => {
@@ -29,6 +31,28 @@ function withFetch(t, impl) {
   t.after(() => {
     global.fetch = original;
   });
+}
+
+/**
+ * The birthday pool always includes the full curated legends/notable-players
+ * list (dozens of names) on top of whatever the test's own log contains, so
+ * every birthdays test needs (a) a clean cache — the cache is a single file
+ * shared across this whole test file, and (b) a URL-aware fetch mock that
+ * only "finds" the name(s) the test cares about, returning "not found" for
+ * every curated name so they don't pollute the result with spurious matches.
+ */
+async function freshCache() {
+  await saveBirthdayCache({});
+}
+
+function fetchFor(matchers) {
+  return async (url) => {
+    const u = String(url);
+    for (const [needle, response] of matchers) {
+      if (u.includes(needle)) return response;
+    }
+    return { ok: true, json: async () => ({ player: null }) };
+  };
 }
 
 // --- computeOnThisDaySignings ------------------------------------------
@@ -114,32 +138,39 @@ test("buildAlmanacPost: truncates rather than exceeding 280 chars", () => {
 // --- computeBirthdaysToday (mocked TheSportsDB + temp cache dir) ---------
 
 test("birthdays: a tracked player whose cached birth date matches today is included", async (t) => {
+  await freshCache();
   const now = new Date("2026-08-07T12:00:00Z");
-  let calls = 0;
-  withFetch(t, async () => {
-    calls++;
-    return { ok: true, json: async () => ({ player: [{ strPlayer: "Test Player Sixteen", dateBorn: "1997-08-07", strSport: "Soccer" }] }) };
+  let sixteenCalls = 0;
+  withFetch(t, async (url) => {
+    if (String(url).includes("Test_Player_Sixteen")) {
+      sixteenCalls++;
+      return { ok: true, json: async () => ({ player: [{ strPlayer: "Test Player Sixteen", dateBorn: "1997-08-07", strSport: "Soccer" }] }) };
+    }
+    return { ok: true, json: async () => ({ player: null }) };
   });
   const log = [
     { id: "1", original: "Test Player Sixteen linked with Arsenal move", createdAt: now.toISOString() },
   ];
   const first = await computeBirthdaysToday(log, { now });
-  assert.equal(first.length, 1);
-  assert.equal(first[0].player, "Test Player Sixteen");
+  assert.deepEqual(
+    first.map((r) => r.player),
+    ["Test Player Sixteen"]
+  );
   assert.equal(first[0].age, 29);
-  assert.equal(calls, 1);
+  assert.equal(sixteenCalls, 1);
 
-  // Second call for the same player should hit the persisted cache, not fetch again.
-  const second = await computeBirthdaysToday(log, { now });
-  assert.equal(second.length, 1);
-  assert.equal(calls, 1);
+  // Second call for the same player should hit the persisted cache for that
+  // specific player, not fetch it again.
+  await computeBirthdaysToday(log, { now });
+  assert.equal(sixteenCalls, 1);
 });
 
 test("birthdays: no match found (null dateBorn) is cached and excluded, not re-fetched", async (t) => {
+  await freshCache();
   const now = new Date("2026-08-07T12:00:00Z");
-  let calls = 0;
-  withFetch(t, async () => {
-    calls++;
+  let seventeenCalls = 0;
+  withFetch(t, async (url) => {
+    if (String(url).includes("Test_Player_Seventeen")) seventeenCalls++;
     return { ok: true, json: async () => ({ player: null }) };
   });
   const log = [
@@ -147,17 +178,42 @@ test("birthdays: no match found (null dateBorn) is cached and excluded, not re-f
   ];
   const first = await computeBirthdaysToday(log, { now });
   assert.deepEqual(first, []);
-  const second = await computeBirthdaysToday(log, { now });
-  assert.deepEqual(second, []);
-  assert.equal(calls, 1);
+  await computeBirthdaysToday(log, { now });
+  assert.equal(seventeenCalls, 1); // second run hits the cached "not found" result instead of re-querying
+});
+
+test("birthdays: curated legend/notable names are checked even with an empty tip log", async (t) => {
+  await freshCache();
+  withFetch(
+    t,
+    fetchFor([
+      [
+        "Erling_Haaland",
+        { ok: true, json: async () => ({ player: [{ strPlayer: "Erling Haaland", dateBorn: "2000-07-21", strTeam: "Manchester City", strSport: "Soccer" }] }) },
+      ],
+    ])
+  );
+  const results = await computeBirthdaysToday([], { now: new Date("2000-07-21T12:00:00Z") });
+  assert.deepEqual(
+    results.map((r) => r.player),
+    ["Erling Haaland"]
+  );
+  assert.equal(results[0].age, 0);
+  assert.equal(results[0].club, "Manchester City");
 });
 
 test("birthdays: mismatched month/day is excluded", async (t) => {
+  await freshCache();
   const now = new Date("2026-08-07T12:00:00Z");
-  withFetch(t, async () => ({
-    ok: true,
-    json: async () => ({ player: [{ strPlayer: "Test Player Eighteen", dateBorn: "1997-01-01", strSport: "Soccer" }] }),
-  }));
+  withFetch(
+    t,
+    fetchFor([
+      [
+        "Test_Player_Eighteen",
+        { ok: true, json: async () => ({ player: [{ strPlayer: "Test Player Eighteen", dateBorn: "1997-01-01", strSport: "Soccer" }] }) },
+      ],
+    ])
+  );
   const log = [
     { id: "1", original: "Test Player Eighteen linked with Liverpool move", createdAt: now.toISOString() },
   ];
